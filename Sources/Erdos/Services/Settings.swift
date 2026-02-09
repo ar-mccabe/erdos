@@ -22,6 +22,9 @@ final class ErdosSettings {
     }
 
     static let availableModels = [
+        "claude-opus-4-6",
+        "claude-sonnet-4-5-20250929",
+        "claude-haiku-4-5-20251001",
         "sonnet",
         "opus",
         "haiku",
@@ -40,7 +43,7 @@ final class ErdosSettings {
             ?? ErdosSettings.detectClaudePath()
 
         self.defaultModel = defaults.string(forKey: "defaultModel")
-            ?? "sonnet"
+            ?? "claude-opus-4-6"
     }
 
     private static func detectClaudePath() -> String {

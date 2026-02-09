@@ -11,6 +11,14 @@ struct ProcessResult: Sendable {
 actor ProcessRunner {
     static let shared = ProcessRunner()
 
+    /// Extra PATH entries needed when running from an app bundle
+    private static let extraPaths = [
+        "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",
+        NSHomeDirectory() + "/.local/bin",
+    ]
+
     func run(
         _ executable: String = "/usr/bin/env",
         arguments: [String] = [],
@@ -26,11 +34,17 @@ actor ProcessRunner {
                 process.currentDirectoryURL = URL(fileURLWithPath: dir)
             }
 
-            if let env = environment {
-                var merged = ProcessInfo.processInfo.environment
-                for (key, value) in env { merged[key] = value }
-                process.environment = merged
+            // Always ensure a usable PATH (app bundles get a minimal one)
+            var env = ProcessInfo.processInfo.environment
+            let currentPath = env["PATH"] ?? "/usr/bin:/bin"
+            let missing = Self.extraPaths.filter { !currentPath.contains($0) }
+            if !missing.isEmpty {
+                env["PATH"] = (missing + [currentPath]).joined(separator: ":")
             }
+            if let overrides = environment {
+                for (key, value) in overrides { env[key] = value }
+            }
+            process.environment = env
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
