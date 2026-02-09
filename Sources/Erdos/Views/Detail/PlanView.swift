@@ -8,6 +8,12 @@ struct PlanView: View {
     @State private var planFilePath: String?
     @State private var autoRefreshTimer: Timer?
     @State private var planLaunchTime: Date?
+    /// Path of the detected plan file in ~/.claude/plans/ (locked on once found)
+    @State private var detectedClaudePlanPath: String?
+    /// Last modification date of the detected plan file (to know when it stabilizes)
+    @State private var detectedPlanLastModified: Date?
+    /// How many consecutive polls the detected plan file hasn't changed
+    @State private var stablePolls: Int = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,7 +31,21 @@ struct PlanView: View {
 
                 Spacer()
 
-                if planFilePath != nil {
+                if !planContent.isEmpty && experiment.worktreePath != nil {
+                    Button {
+                        launchUpdatePlan()
+                    } label: {
+                        Label("Update Plan", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+
+                if let path = planFilePath {
+                    Text(path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                        .font(.caption2)
+                        .foregroundStyle(.quaternary)
+
                     Button(isEditing ? "Preview" : "Edit") {
                         if isEditing {
                             savePlan()
@@ -37,11 +57,32 @@ struct PlanView: View {
                     .buttonStyle(.borderless)
                     .font(.caption)
                 }
-                Button("Refresh") {
-                    Task { await loadPlan() }
+                if planLaunchTime != nil {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("Watching for plan...")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button("Stop") {
+                        planLaunchTime = nil
+                        detectedClaudePlanPath = nil
+                        detectedPlanLastModified = nil
+                        stablePolls = 0
+                        autoRefreshTimer?.invalidate()
+                        autoRefreshTimer = nil
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                } else {
+                    Button("Refresh") {
+                        Task { await loadPlan() }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
                 }
-                .buttonStyle(.borderless)
-                .font(.caption)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -102,30 +143,37 @@ struct PlanView: View {
     }
 
     private func launchResearchPlan() {
-        let prompt = buildResearchPrompt()
+        launchClaudeWithPrompt(buildResearchPrompt(), label: "Research Plan")
+    }
 
+    private func launchUpdatePlan() {
+        launchClaudeWithPrompt(buildUpdatePrompt(), label: "Update Plan")
+    }
+
+    private func launchClaudeWithPrompt(_ prompt: String, label: String) {
         // Write prompt to temp file to avoid shell quoting issues
         let tmpFile = NSTemporaryDirectory() + "erdos-prompt-\(UUID().uuidString).txt"
         try? prompt.write(toFile: tmpFile, atomically: true, encoding: .utf8)
 
-        // Launch interactive claude with the prompt as first message
         let model = ErdosSettings.shared.defaultModel
         let command = "claude \"$(cat '\(tmpFile)')\" --model \(model) --permission-mode plan --allowed-tools 'Read,Glob,Grep,WebSearch,WebFetch,Task,\"Bash(git log:*)\",\"Bash(git diff:*)\",\"Bash(git show:*)\",\"Bash(git status:*)\",\"Bash(git branch:*)\",\"Bash(git -C:*)\"'; rm -f '\(tmpFile)'"
 
         // Record launch time so we can find the plan file Claude creates in ~/.claude/plans/
         planLaunchTime = Date()
+        detectedClaudePlanPath = nil
+        detectedPlanLastModified = nil
+        stablePolls = 0
 
         NotificationCenter.default.post(
             name: .launchClaude,
             object: nil,
             userInfo: [
                 "command": command,
-                "label": "Research Plan",
+                "label": label,
                 "experimentId": experiment.id.uuidString,
             ]
         )
 
-        // Start auto-refreshing to pick up the plan
         startAutoRefresh()
     }
 
@@ -169,6 +217,38 @@ struct PlanView: View {
         return parts.joined(separator: "\n")
     }
 
+    private func buildUpdatePrompt() -> String {
+        var parts: [String] = []
+
+        parts.append("You are updating an existing implementation plan. The codebase has changed since this plan was written. Your goal is to re-explore the codebase and revise the plan to reflect the current state.")
+
+        parts.append("")
+        parts.append("## Experiment: \(experiment.title)")
+
+        if !experiment.hypothesis.isEmpty {
+            parts.append("")
+            parts.append("## Hypothesis")
+            parts.append(experiment.hypothesis)
+        }
+
+        parts.append("")
+        parts.append("## Current Plan")
+        parts.append(planContent)
+
+        parts.append("")
+        parts.append("## Instructions")
+        parts.append("""
+        1. Read the current plan above carefully
+        2. Explore the codebase to understand what has changed since the plan was written
+        3. Run `git log --oneline -20` to see recent commits
+        4. Revise the plan to account for the current state of the codebase
+        5. Keep the same intent and goals — just update the approach, file references, and steps to match reality
+        6. You are in plan mode — write your updated plan and use ExitPlanMode when done
+        """)
+
+        return parts.joined(separator: "\n")
+    }
+
     private func startAutoRefresh() {
         autoRefreshTimer?.invalidate()
         autoRefreshTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
@@ -186,7 +266,42 @@ struct PlanView: View {
 
         let planMdPath = (worktree as NSString).appendingPathComponent("PLAN.md")
 
-        // 1. Check if PLAN.md already exists in worktree
+        // If actively waiting for a plan from Claude, check ~/.claude/plans/ first
+        if let launchTime = planLaunchTime {
+            if let (path, modified, content) = findClaudePlanFile(after: launchTime) {
+                if detectedClaudePlanPath == nil {
+                    // First time seeing this plan file — lock onto it
+                    detectedClaudePlanPath = path
+                    detectedPlanLastModified = modified
+                    stablePolls = 0
+                } else if modified == detectedPlanLastModified {
+                    // File hasn't changed since last poll
+                    stablePolls += 1
+                } else {
+                    // File was updated — reset stability counter
+                    detectedPlanLastModified = modified
+                    stablePolls = 0
+                }
+
+                // After 3 stable polls (~9s of no changes), consider it final
+                if stablePolls >= 3 {
+                    try? content.write(toFile: planMdPath, atomically: true, encoding: .utf8)
+                    planContent = content
+                    planFilePath = planMdPath
+                    planLaunchTime = nil
+                    detectedClaudePlanPath = nil
+                    detectedPlanLastModified = nil
+                    stablePolls = 0
+                    autoRefreshTimer?.invalidate()
+                    autoRefreshTimer = nil
+                    return
+                }
+            }
+            // Keep polling — don't fall through to stop the timer
+            return
+        }
+
+        // No active session — just load PLAN.md from worktree
         if FileManager.default.fileExists(atPath: planMdPath),
            let content = try? String(contentsOfFile: planMdPath, encoding: .utf8),
            !content.isEmpty {
@@ -197,28 +312,25 @@ struct PlanView: View {
             return
         }
 
-        // 2. If a research plan session is active, check ~/.claude/plans/ for new plan files
-        if let launchTime = planLaunchTime {
-            if let content = findClaudePlanFile(after: launchTime) {
-                // Copy to PLAN.md in worktree so it persists with the experiment
-                try? content.write(toFile: planMdPath, atomically: true, encoding: .utf8)
-                planContent = content
-                planFilePath = planMdPath
-                planLaunchTime = nil
-                autoRefreshTimer?.invalidate()
-                autoRefreshTimer = nil
-                return
-            }
-        }
-
         planContent = ""
     }
 
-    /// Scan ~/.claude/plans/ for the newest .md file created after the given date
-    private func findClaudePlanFile(after launchTime: Date) -> String? {
+    /// Scan ~/.claude/plans/ for the newest .md file modified after the given date.
+    /// Returns (path, modificationDate, content) or nil.
+    private func findClaudePlanFile(after launchTime: Date) -> (String, Date, String)? {
         let plansDir = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/plans")
         let fm = FileManager.default
 
+        // If we've already locked onto a file, just check that one
+        if let locked = detectedClaudePlanPath {
+            guard let attrs = try? fm.attributesOfItem(atPath: locked),
+                  let modified = attrs[.modificationDate] as? Date,
+                  let content = try? String(contentsOfFile: locked, encoding: .utf8),
+                  !content.isEmpty else { return nil }
+            return (locked, modified, content)
+        }
+
+        // Otherwise scan for the newest file after launch time
         guard let files = try? fm.contentsOfDirectory(atPath: plansDir) else { return nil }
 
         var bestFile: String?
@@ -237,7 +349,7 @@ struct PlanView: View {
               let content = try? String(contentsOfFile: path, encoding: .utf8),
               !content.isEmpty else { return nil }
 
-        return content
+        return (path, bestDate, content)
     }
 
     private func savePlan() {
