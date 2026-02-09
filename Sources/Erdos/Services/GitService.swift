@@ -27,6 +27,39 @@ final class GitService {
         let behind: Int
     }
 
+    struct FileStatus: Sendable, Identifiable, Hashable {
+        let index: Character    // X — index/staging area status
+        let worktree: Character // Y — working tree status
+        let path: String
+
+        var id: String { path }
+
+        var isStaged: Bool {
+            index != " " && index != "?"
+        }
+
+        var isUnstaged: Bool {
+            worktree != " " && worktree != "?"
+        }
+
+        var isUntracked: Bool {
+            index == "?" && worktree == "?"
+        }
+
+        var statusLabel: String {
+            switch (index, worktree) {
+            case ("?", "?"): return "Untracked"
+            case ("A", _): return "Added"
+            case ("D", _): return "Deleted"
+            case ("R", _): return "Renamed"
+            case ("M", " "): return "Staged"
+            case (" ", "M"): return "Modified"
+            case ("M", "M"): return "Staged + Modified"
+            default: return "\(index)\(worktree)"
+            }
+        }
+    }
+
     // MARK: - Branches
 
     func listBranches(repoPath: String) async throws -> [BranchInfo] {
@@ -159,6 +192,34 @@ final class GitService {
         }
 
         return RepoStatus(branch: branch, dirtyFiles: dirtyFiles, ahead: ahead, behind: behind)
+    }
+
+    // MARK: - Detailed Status & Diff
+
+    func getDetailedStatus(path: String) async throws -> [FileStatus] {
+        let result = try await runner.git("status", "--porcelain=v1", in: path)
+        guard result.succeeded else { throw GitError.commandFailed(result.stderr) }
+
+        return result.stdout
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { line -> FileStatus? in
+                // Porcelain v1: XY <space> filename  (minimum 4 chars: "XY F")
+                guard line.count >= 4 else { return nil }
+                let index = line[line.startIndex]
+                let worktree = line[line.index(after: line.startIndex)]
+                let filePath = String(line.dropFirst(3))
+                return FileStatus(index: index, worktree: worktree, path: filePath)
+            }
+    }
+
+    func getDiff(path: String, staged: Bool, filePath: String? = nil) async throws -> String {
+        var args = ["diff", "--patch-with-stat", "--no-color"]
+        if staged { args.append("--cached") }
+        if let filePath { args.append(contentsOf: ["--", filePath]) }
+
+        let result = try await runner.run("/usr/bin/git", arguments: args, currentDirectory: path)
+        guard result.succeeded else { throw GitError.commandFailed(result.stderr) }
+        return result.stdout
     }
 
     enum GitError: Error, LocalizedError {

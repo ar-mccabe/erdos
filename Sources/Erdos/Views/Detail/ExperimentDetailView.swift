@@ -18,6 +18,7 @@ struct ExperimentDetailView: View {
         case notes = "Notes"
         case artifacts = "Artifacts"
         case timeline = "Timeline"
+        case changes = "Changes"
 
         var id: String { rawValue }
 
@@ -27,6 +28,7 @@ struct ExperimentDetailView: View {
             case .notes: "note.text"
             case .artifacts: "doc.on.doc"
             case .timeline: "clock"
+            case .changes: "arrow.triangle.pull"
             }
         }
     }
@@ -207,6 +209,8 @@ struct ExperimentDetailView: View {
             ArtifactsView(experiment: experiment)
         case .timeline:
             TimelineView(experiment: experiment)
+        case .changes:
+            ChangesView(experiment: experiment)
         }
     }
 
