@@ -109,7 +109,7 @@ struct PlanView: View {
 
         // Launch interactive claude with the prompt as first message
         let model = ErdosSettings.shared.defaultModel
-        let command = "claude \"$(cat '\(tmpFile)')\" --model \(model); rm -f '\(tmpFile)'"
+        let command = "claude \"$(cat '\(tmpFile)')\" --model \(model) --permission-mode plan --allowed-tools 'Read,Glob,Grep,WebSearch,WebFetch,Task'; rm -f '\(tmpFile)'"
 
         NotificationCenter.default.post(
             name: .launchClaude,

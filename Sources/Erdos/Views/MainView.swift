@@ -4,6 +4,10 @@ import SwiftData
 struct MainView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \Experiment.updatedAt, order: .reverse) private var experiments: [Experiment]
+
+    /// Experiments that have been opened at least once — their views stay alive
+    @State private var visitedExperimentIDs: Set<PersistentIdentifier> = []
 
     var body: some View {
         @Bindable var state = appState
@@ -11,17 +15,30 @@ struct MainView: View {
         NavigationSplitView {
             SidebarView()
         } detail: {
-            if let experiment = appState.selectedExperiment {
-                ExperimentDetailView(experiment: experiment)
-            } else {
-                ContentUnavailableView(
-                    "No Experiment Selected",
-                    systemImage: "flask",
-                    description: Text("Select an experiment from the sidebar or create a new one.")
-                )
+            ZStack {
+                // Keep all visited experiment views alive (preserves terminals)
+                ForEach(experiments.filter { visitedExperimentIDs.contains($0.persistentModelID) }) { experiment in
+                    ExperimentDetailView(experiment: experiment)
+                        .opacity(experiment.persistentModelID == appState.selectedExperiment?.persistentModelID ? 1 : 0)
+                        .allowsHitTesting(experiment.persistentModelID == appState.selectedExperiment?.persistentModelID)
+                }
+
+                // Empty state when nothing selected
+                if appState.selectedExperiment == nil {
+                    ContentUnavailableView(
+                        "No Experiment Selected",
+                        systemImage: "flask",
+                        description: Text("Select an experiment from the sidebar or create a new one.")
+                    )
+                }
             }
         }
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 350)
+        .onChange(of: appState.selectedExperiment) { _, newExperiment in
+            if let exp = newExperiment {
+                visitedExperimentIDs.insert(exp.persistentModelID)
+            }
+        }
         .sheet(isPresented: $state.isCreatingExperiment) {
             NewExperimentSheet()
         }
