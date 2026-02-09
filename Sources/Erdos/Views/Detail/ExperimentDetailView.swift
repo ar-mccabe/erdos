@@ -10,6 +10,8 @@ struct ExperimentDetailView: View {
     @State private var showTerminal = true
     @State private var terminalHeight: CGFloat = 250
     @State private var repoStatus: GitService.RepoStatus?
+    @State private var isCreatingWorktree = false
+    @State private var worktreeError: String?
 
     enum DetailTab: String, CaseIterable, Identifiable {
         case plan = "Plan"
@@ -133,6 +135,24 @@ struct ExperimentDetailView: View {
                     }
                     .font(.caption)
                     .buttonStyle(.borderless)
+                } else if !experiment.repoPath.isEmpty {
+                    Button {
+                        Task { await createWorktree() }
+                    } label: {
+                        Label(isCreatingWorktree ? "Creating..." : "Create Worktree",
+                              systemImage: "plus.rectangle.on.folder")
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isCreatingWorktree)
+
+                    if let worktreeError {
+                        Text(worktreeError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .help(worktreeError)
+                    }
                 }
 
                 if !experiment.tags.isEmpty {
@@ -200,7 +220,11 @@ struct ExperimentDetailView: View {
                 .fontWeight(.medium)
             Spacer()
             Button("Launch Claude") {
-                NotificationCenter.default.post(name: .launchClaude, object: nil)
+                NotificationCenter.default.post(
+                    name: .launchClaude,
+                    object: nil,
+                    userInfo: ["experimentId": experiment.id.uuidString]
+                )
             }
             .font(.caption)
             .buttonStyle(.borderless)
@@ -213,6 +237,39 @@ struct ExperimentDetailView: View {
     private func loadStatus() async {
         guard let path = experiment.worktreePath ?? (experiment.repoPath.isEmpty ? nil : experiment.repoPath) else { return }
         repoStatus = try? await appState.gitService.getStatus(path: path)
+    }
+
+    private func createWorktree() async {
+        guard !experiment.repoPath.isEmpty else { return }
+        isCreatingWorktree = true
+        worktreeError = nil
+
+        let branchName = experiment.branchName ?? experiment.slug
+        let baseBranch = experiment.baseBranch ?? "main"
+
+        do {
+            let worktreePath = try await appState.gitService.createWorktree(
+                repoPath: experiment.repoPath,
+                branchName: branchName,
+                baseBranch: baseBranch
+            )
+            experiment.worktreePath = worktreePath
+            experiment.branchName = branchName
+            experiment.baseBranch = baseBranch
+
+            let event = TimelineEvent(
+                eventType: .branchCreated,
+                summary: "Created worktree with branch '\(branchName)'"
+            )
+            event.experiment = experiment
+            modelContext.insert(event)
+
+            await loadStatus()
+        } catch {
+            worktreeError = error.localizedDescription
+        }
+
+        isCreatingWorktree = false
     }
 }
 

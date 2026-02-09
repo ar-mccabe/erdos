@@ -56,10 +56,32 @@ final class GitService {
             try fm.createDirectory(atPath: Self.worktreeBase, withIntermediateDirectories: true)
         }
 
-        let result = try await runner.git(
-            "worktree", "add", "-b", branchName, worktreePath, baseBranch,
-            in: repoPath
-        )
+        // Clean up stale worktree directory from a previous failed attempt
+        if fm.fileExists(atPath: worktreePath) {
+            try fm.removeItem(atPath: worktreePath)
+            // Also prune git's worktree list
+            _ = try? await runner.git("worktree", "prune", in: repoPath)
+        }
+
+        // Check if branch already exists
+        let branchCheck = try await runner.git("rev-parse", "--verify", branchName, in: repoPath)
+        let branchExists = branchCheck.succeeded
+
+        let result: ProcessResult
+        if branchExists {
+            // Use existing branch
+            result = try await runner.git(
+                "worktree", "add", worktreePath, branchName,
+                in: repoPath
+            )
+        } else {
+            // Create new branch from base
+            result = try await runner.git(
+                "worktree", "add", "-b", branchName, worktreePath, baseBranch,
+                in: repoPath
+            )
+        }
+
         guard result.succeeded else { throw GitError.commandFailed(result.stderr) }
 
         return worktreePath

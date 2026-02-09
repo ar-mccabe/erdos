@@ -86,6 +86,12 @@ struct TerminalPanelView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .launchClaude)) { notification in
+            // Only handle notifications targeted at this experiment
+            if let targetId = notification.userInfo?["experimentId"] as? String,
+               targetId != experiment.id.uuidString {
+                return
+            }
+
             if let prompt = notification.userInfo?["prompt"] as? String {
                 // Interactive claude with a prompt typed in after launch
                 let label = notification.userInfo?["label"] as? String ?? "Claude"
