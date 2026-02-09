@@ -108,7 +108,8 @@ struct PlanView: View {
         try? prompt.write(toFile: tmpFile, atomically: true, encoding: .utf8)
 
         // Launch interactive claude with the prompt as first message
-        let command = "claude \"$(cat '\(tmpFile)')\" --model sonnet; rm -f '\(tmpFile)'"
+        let model = ErdosSettings.shared.defaultModel
+        let command = "claude \"$(cat '\(tmpFile)')\" --model \(model); rm -f '\(tmpFile)'"
 
         NotificationCenter.default.post(
             name: .launchClaude,

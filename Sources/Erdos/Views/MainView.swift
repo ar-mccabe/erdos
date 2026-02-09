@@ -25,6 +25,10 @@ struct MainView: View {
         .sheet(isPresented: $state.isCreatingExperiment) {
             NewExperimentSheet()
         }
+        .sheet(isPresented: $state.showSettings) {
+            SettingsView()
+                .padding()
+        }
         .task {
             await appState.repoDiscovery.scan()
         }

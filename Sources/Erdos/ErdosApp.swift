@@ -32,6 +32,17 @@ struct ErdosApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
             }
+            CommandGroup(after: .appSettings) {
+                Button("Settings...") {
+                    appState.showSettings = true
+                }
+                .keyboardShortcut(",", modifiers: .command)
+            }
         }
+
+        Window("Settings", id: "settings") {
+            SettingsView()
+        }
+        .defaultSize(width: 500, height: 350)
     }
 }

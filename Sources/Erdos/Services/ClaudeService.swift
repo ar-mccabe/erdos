@@ -47,21 +47,7 @@ enum ResearchPermissionMode: String, CaseIterable, Identifiable {
 final class ClaudeService {
     private var currentProcess: Process?
 
-    /// Find the Claude CLI executable
-    private var claudePath: String {
-        // Check common locations
-        let candidates = [
-            NSHomeDirectory() + "/.local/bin/claude",
-            "/usr/local/bin/claude",
-            "/opt/homebrew/bin/claude",
-        ]
-        for path in candidates {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
-        return "claude" // fallback to PATH
-    }
+    private var claudePath: String { ErdosSettings.shared.claudePath }
 
     func streamResearch(
         prompt: String,

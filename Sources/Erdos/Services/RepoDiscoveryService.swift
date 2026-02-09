@@ -18,11 +18,7 @@ final class RepoDiscoveryService {
         }
     }
 
-    private let scanRoot: String
-
-    init(scanRoot: String = NSHomeDirectory() + "/GitHub") {
-        self.scanRoot = scanRoot
-    }
+    private var scanRoot: String { ErdosSettings.shared.repoScanRoot }
 
     func scan() async {
         isScanning = true

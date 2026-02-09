@@ -3,7 +3,7 @@ import Foundation
 @Observable
 @MainActor
 final class GitService {
-    static let worktreeBase = NSHomeDirectory() + "/experiment-lab-worktrees"
+    static var worktreeBase: String { ErdosSettings.shared.worktreeBasePath }
 
     private let runner = ProcessRunner.shared
 
