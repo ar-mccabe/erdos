@@ -6,13 +6,12 @@ struct ExperimentDetailView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
 
-    @State private var selectedTab: DetailTab = .research
+    @State private var selectedTab: DetailTab = .plan
     @State private var showTerminal = true
     @State private var terminalHeight: CGFloat = 250
     @State private var repoStatus: GitService.RepoStatus?
 
     enum DetailTab: String, CaseIterable, Identifiable {
-        case research = "Research"
         case plan = "Plan"
         case notes = "Notes"
         case artifacts = "Artifacts"
@@ -22,7 +21,6 @@ struct ExperimentDetailView: View {
 
         var icon: String {
             switch self {
-            case .research: "magnifyingglass"
             case .plan: "list.bullet.clipboard"
             case .notes: "note.text"
             case .artifacts: "doc.on.doc"
@@ -181,8 +179,6 @@ struct ExperimentDetailView: View {
     @ViewBuilder
     private var tabContent: some View {
         switch selectedTab {
-        case .research:
-            ResearchView(experiment: experiment)
         case .plan:
             PlanView(experiment: experiment)
         case .notes:
@@ -203,18 +199,6 @@ struct ExperimentDetailView: View {
                 .font(.caption)
                 .fontWeight(.medium)
             Spacer()
-            if let sessionId = experiment.sessions.last(where: { $0.sessionId != nil })?.sessionId {
-                Button("Resume Claude") {
-                    // Will be implemented in terminal panel
-                    NotificationCenter.default.post(
-                        name: .launchClaude,
-                        object: nil,
-                        userInfo: ["sessionId": sessionId]
-                    )
-                }
-                .font(.caption)
-                .buttonStyle(.borderless)
-            }
             Button("Launch Claude") {
                 NotificationCenter.default.post(name: .launchClaude, object: nil)
             }

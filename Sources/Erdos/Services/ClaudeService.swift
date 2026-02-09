@@ -1,5 +1,47 @@
 import Foundation
 
+enum ResearchPermissionMode: String, CaseIterable, Identifiable {
+    case readAndWeb       // Default: read code + search web, no writes
+    case readOnly         // Read code only, no web
+    case fullAccess       // Can read, write, execute — use with caution
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .readAndWeb: "Read + Web (Recommended)"
+        case .readOnly: "Read Only"
+        case .fullAccess: "Full Access"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .readAndWeb: "Can read code and search the web. Cannot edit files or run commands."
+        case .readOnly: "Can only read code. No web access, no edits."
+        case .fullAccess: "Can read, edit, run commands, and search the web. Use with caution."
+        }
+    }
+
+    var cliArgs: [String] {
+        switch self {
+        case .readAndWeb:
+            return [
+                "--permission-mode", "plan",
+                "--allowed-tools", "Read,Glob,Grep,WebSearch,WebFetch,Task",
+            ]
+        case .readOnly:
+            return [
+                "--permission-mode", "plan",
+            ]
+        case .fullAccess:
+            return [
+                "--permission-mode", "bypassPermissions",
+            ]
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class ClaudeService {
@@ -26,6 +68,7 @@ final class ClaudeService {
         workingDirectory: String?,
         resumeSessionId: String? = nil,
         model: String = "sonnet",
+        permissionMode: ResearchPermissionMode = .readAndWeb,
         maxBudget: Double = 2.0
     ) -> AsyncThrowingStream<ClaudeStreamEvent, Error> {
         let claudeExe = claudePath
@@ -42,6 +85,9 @@ final class ClaudeService {
                     "--model", model,
                     "--max-turns", "30",
                 ]
+
+                // Apply permission mode
+                args += permissionMode.cliArgs
 
                 if let sessionId = resumeSessionId {
                     args += ["--resume", sessionId]

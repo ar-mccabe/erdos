@@ -4,7 +4,24 @@ import SwiftTerm
 struct TerminalRepresentable: NSViewRepresentable {
     let workingDirectory: String
     let initialCommand: String?
+    /// Text to send as input after the initial command has launched (e.g. a prompt to type into claude)
+    let delayedInput: String?
+    let delayedInputDelay: TimeInterval
     @Binding var terminalView: LocalProcessTerminalView?
+
+    init(
+        workingDirectory: String,
+        initialCommand: String? = nil,
+        delayedInput: String? = nil,
+        delayedInputDelay: TimeInterval = 2.0,
+        terminalView: Binding<LocalProcessTerminalView?>
+    ) {
+        self.workingDirectory = workingDirectory
+        self.initialCommand = initialCommand
+        self.delayedInput = delayedInput
+        self.delayedInputDelay = delayedInputDelay
+        self._terminalView = terminalView
+    }
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         let terminal = LocalProcessTerminalView(frame: .zero)
@@ -33,6 +50,14 @@ struct TerminalRepresentable: NSViewRepresentable {
         if let cmd = initialCommand {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 terminal.send(txt: cmd + "\n")
+            }
+        }
+
+        // Send delayed input (e.g. prompt text into an interactive claude session)
+        if let input = delayedInput {
+            let baseDelay = initialCommand != nil ? 0.5 + delayedInputDelay : delayedInputDelay
+            DispatchQueue.main.asyncAfter(deadline: .now() + baseDelay) {
+                terminal.send(txt: input + "\n")
             }
         }
 

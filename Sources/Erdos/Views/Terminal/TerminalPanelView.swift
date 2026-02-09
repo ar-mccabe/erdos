@@ -11,6 +11,7 @@ struct TerminalPanelView: View {
         let id = UUID()
         var label: String
         var initialCommand: String?
+        var delayedInput: String?
     }
 
     var body: some View {
@@ -70,6 +71,7 @@ struct TerminalPanelView: View {
                 TerminalRepresentable(
                     workingDirectory: experiment.worktreePath ?? experiment.repoPath,
                     initialCommand: tab.initialCommand,
+                    delayedInput: tab.delayedInput,
                     terminalView: Binding(
                         get: { terminalViews[tab.id] },
                         set: { terminalViews[tab.id] = $0 }
@@ -84,7 +86,15 @@ struct TerminalPanelView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .launchClaude)) { notification in
-            if let sessionId = notification.userInfo?["sessionId"] as? String {
+            if let prompt = notification.userInfo?["prompt"] as? String {
+                // Interactive claude with a prompt typed in after launch
+                let label = notification.userInfo?["label"] as? String ?? "Claude"
+                addTab(label: label, command: "claude", delayedInput: prompt)
+            } else if let command = notification.userInfo?["command"] as? String {
+                // Custom command
+                let label = notification.userInfo?["label"] as? String ?? "Claude"
+                addTab(label: label, command: command)
+            } else if let sessionId = notification.userInfo?["sessionId"] as? String {
                 addTab(label: "Claude (resume)", command: "claude --resume \(sessionId)")
             } else {
                 addTab(label: "Claude", command: "claude")
@@ -92,8 +102,8 @@ struct TerminalPanelView: View {
         }
     }
 
-    private func addTab(label: String = "zsh", command: String? = nil) {
-        let tab = TerminalTab(label: label, initialCommand: command)
+    private func addTab(label: String = "zsh", command: String? = nil, delayedInput: String? = nil) {
+        let tab = TerminalTab(label: label, initialCommand: command, delayedInput: delayedInput)
         tabs.append(tab)
         selectedTabId = tab.id
     }

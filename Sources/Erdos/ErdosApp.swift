@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AppKit
 
 @main
 struct ErdosApp: App {
@@ -9,6 +10,12 @@ struct ErdosApp: App {
         WindowGroup {
             MainView()
                 .environment(appState)
+                .onAppear {
+                    // When running via `swift run` (no .app bundle), macOS doesn't
+                    // make us a foreground app — so windows can't receive keyboard input.
+                    NSApp.setActivationPolicy(.regular)
+                    NSApp.activate()
+                }
         }
         .modelContainer(for: [
             Experiment.self,
