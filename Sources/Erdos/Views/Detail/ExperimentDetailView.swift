@@ -12,6 +12,7 @@ struct ExperimentDetailView: View {
     @State private var repoStatus: GitService.RepoStatus?
     @State private var isCreatingWorktree = false
     @State private var worktreeError: String?
+    @State private var hasWaitingClaudeSession = false
 
     enum DetailTab: String, CaseIterable, Identifiable {
         case plan = "Plan"
@@ -54,7 +55,7 @@ struct ExperimentDetailView: View {
                     VStack(spacing: 0) {
                         terminalToolbar
                         Divider()
-                        TerminalPanelView(experiment: experiment)
+                        TerminalPanelView(experiment: experiment, hasWaitingClaudeSession: $hasWaitingClaudeSession)
                     }
                     .frame(minHeight: 150, idealHeight: terminalHeight)
                 }
@@ -65,6 +66,16 @@ struct ExperimentDetailView: View {
         }
         .onChange(of: experiment.worktreePath) { _, _ in
             Task { await loadStatus() }
+        }
+        .onChange(of: hasWaitingClaudeSession) { _, waiting in
+            if waiting {
+                appState.experimentsWaitingForInput.insert(experiment.id)
+            } else {
+                appState.experimentsWaitingForInput.remove(experiment.id)
+            }
+        }
+        .onDisappear {
+            appState.experimentsWaitingForInput.remove(experiment.id)
         }
     }
 

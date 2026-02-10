@@ -13,6 +13,9 @@ final class AppState {
     let repoDiscovery = RepoDiscoveryService()
     let gitService = GitService()
 
+    // Notification dots — experiments with a Claude session waiting for input
+    var experimentsWaitingForInput: Set<UUID> = []
+
     // Status bar
     var activeSessionCount = 0
     var todayCostUSD: Double = 0

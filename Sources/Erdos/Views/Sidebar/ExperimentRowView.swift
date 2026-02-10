@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ExperimentRowView: View {
     let experiment: Experiment
+    @Environment(AppState.self) private var appState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
@@ -10,6 +11,11 @@ struct ExperimentRowView: View {
                     .font(.body)
                     .fontWeight(.medium)
                     .lineLimit(1)
+                if appState.experimentsWaitingForInput.contains(experiment.id) {
+                    Circle()
+                        .fill(.blue)
+                        .frame(width: 8, height: 8)
+                }
                 Spacer()
                 StatusBadge(status: experiment.status)
             }

@@ -7,14 +7,14 @@ struct TerminalRepresentable: NSViewRepresentable {
     /// Text to send as input after the initial command has launched (e.g. a prompt to type into claude)
     let delayedInput: String?
     let delayedInputDelay: TimeInterval
-    @Binding var terminalView: LocalProcessTerminalView?
+    @Binding var terminalView: MonitoredTerminalView?
 
     init(
         workingDirectory: String,
         initialCommand: String? = nil,
         delayedInput: String? = nil,
         delayedInputDelay: TimeInterval = 2.0,
-        terminalView: Binding<LocalProcessTerminalView?>
+        terminalView: Binding<MonitoredTerminalView?>
     ) {
         self.workingDirectory = workingDirectory
         self.initialCommand = initialCommand
@@ -23,8 +23,8 @@ struct TerminalRepresentable: NSViewRepresentable {
         self._terminalView = terminalView
     }
 
-    func makeNSView(context: Context) -> LocalProcessTerminalView {
-        let terminal = LocalProcessTerminalView(frame: .zero)
+    func makeNSView(context: Context) -> MonitoredTerminalView {
+        let terminal = MonitoredTerminalView(frame: .zero)
 
         // Configure appearance
         terminal.nativeForegroundColor = .textColor
@@ -68,7 +68,7 @@ struct TerminalRepresentable: NSViewRepresentable {
         return terminal
     }
 
-    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
+    func updateNSView(_ nsView: MonitoredTerminalView, context: Context) {
         // No updates needed - terminal manages its own state
     }
 }

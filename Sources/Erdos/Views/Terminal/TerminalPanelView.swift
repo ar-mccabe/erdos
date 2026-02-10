@@ -3,15 +3,22 @@ import SwiftTerm
 
 struct TerminalPanelView: View {
     let experiment: Experiment
+    @Binding var hasWaitingClaudeSession: Bool
     @State private var tabs: [TerminalTab] = []
     @State private var selectedTabId: UUID?
-    @State private var terminalViews: [UUID: LocalProcessTerminalView] = [:]
+    @State private var terminalViews: [UUID: MonitoredTerminalView] = [:]
+    @State private var idleCheckTimer: Timer?
 
     struct TerminalTab: Identifiable {
         let id = UUID()
         var label: String
         var initialCommand: String?
         var delayedInput: String?
+
+        var isClaudeTab: Bool {
+            label.localizedCaseInsensitiveContains("claude")
+                || (initialCommand?.localizedCaseInsensitiveContains("claude") ?? false)
+        }
     }
 
     var body: some View {
@@ -54,6 +61,17 @@ struct TerminalPanelView: View {
 
                 Spacer()
 
+                if let id = selectedTabId, terminalViews[id] != nil {
+                    Button {
+                        resetTerminal(id)
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("Reset terminal display")
+                }
+
                 Button("Claude") {
                     addTab(label: "Claude", command: "claude")
                 }
@@ -86,6 +104,11 @@ struct TerminalPanelView: View {
             if tabs.isEmpty {
                 addTab()
             }
+            startIdleCheckTimer()
+        }
+        .onDisappear {
+            idleCheckTimer?.invalidate()
+            idleCheckTimer = nil
         }
         .onReceive(NotificationCenter.default.publisher(for: .launchClaude)) { notification in
             // Only handle notifications targeted at this experiment
@@ -116,11 +139,42 @@ struct TerminalPanelView: View {
         selectedTabId = tab.id
     }
 
+    private func resetTerminal(_ id: UUID) {
+        guard let terminal = terminalViews[id] else { return }
+        terminal.send(txt: "\u{1b}c")  // ESC c — full terminal reset
+    }
+
     private func closeTab(_ id: UUID) {
         tabs.removeAll { $0.id == id }
         terminalViews.removeValue(forKey: id)
         if selectedTabId == id {
             selectedTabId = tabs.last?.id
         }
+    }
+
+    private func startIdleCheckTimer() {
+        idleCheckTimer?.invalidate()
+        idleCheckTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+            DispatchQueue.main.async {
+                checkForIdleClaude()
+            }
+        }
+    }
+
+    private func checkForIdleClaude() {
+        let now = Date()
+        let idleThreshold: TimeInterval = 30
+
+        let waiting = tabs.contains { tab in
+            guard tab.isClaudeTab,
+                  let terminal = terminalViews[tab.id],
+                  terminal.isProcessRunning,
+                  let lastOutput = terminal.lastOutputTime else {
+                return false
+            }
+            return now.timeIntervalSince(lastOutput) > idleThreshold
+        }
+
+        hasWaitingClaudeSession = waiting
     }
 }
