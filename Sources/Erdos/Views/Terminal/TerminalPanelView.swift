@@ -65,19 +65,21 @@ struct TerminalPanelView: View {
             .padding(.vertical, 2)
             .background(.bar)
 
-            // Terminal content
-            if let selectedId = selectedTabId,
-               let tab = tabs.first(where: { $0.id == selectedId }) {
-                TerminalRepresentable(
-                    workingDirectory: experiment.worktreePath ?? experiment.repoPath,
-                    initialCommand: tab.initialCommand,
-                    delayedInput: tab.delayedInput,
-                    terminalView: Binding(
-                        get: { terminalViews[tab.id] },
-                        set: { terminalViews[tab.id] = $0 }
+            // Terminal content — ZStack keeps all sessions alive across tab switches
+            ZStack {
+                ForEach(tabs) { tab in
+                    TerminalRepresentable(
+                        workingDirectory: experiment.worktreePath ?? experiment.repoPath,
+                        initialCommand: tab.initialCommand,
+                        delayedInput: tab.delayedInput,
+                        terminalView: Binding(
+                            get: { terminalViews[tab.id] },
+                            set: { terminalViews[tab.id] = $0 }
+                        )
                     )
-                )
-                .id(tab.id) // Force new view per tab
+                    .opacity(selectedTabId == tab.id ? 1 : 0)
+                    .allowsHitTesting(selectedTabId == tab.id)
+                }
             }
         }
         .onAppear {

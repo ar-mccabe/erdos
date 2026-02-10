@@ -8,11 +8,9 @@ struct PlanView: View {
     @State private var planFilePath: String?
     @State private var autoRefreshTimer: Timer?
     @State private var planLaunchTime: Date?
-    /// Path of the detected plan file in ~/.claude/plans/ (locked on once found)
-    @State private var detectedClaudePlanPath: String?
-    /// Last modification date of the detected plan file (to know when it stabilizes)
+    /// Last modification date of the newest plan file (to know when it stabilizes)
     @State private var detectedPlanLastModified: Date?
-    /// How many consecutive polls the detected plan file hasn't changed
+    /// How many consecutive polls the newest plan file hasn't changed
     @State private var stablePolls: Int = 0
 
     var body: some View {
@@ -51,7 +49,6 @@ struct PlanView: View {
 
                     Button("Stop") {
                         planLaunchTime = nil
-                        detectedClaudePlanPath = nil
                         detectedPlanLastModified = nil
                         stablePolls = 0
                         autoRefreshTimer?.invalidate()
@@ -159,7 +156,35 @@ struct PlanView: View {
         launchClaudeWithPrompt(buildUpdatePrompt(), label: "Update Plan")
     }
 
+    /// Write `.claude/settings.json` into the worktree with `plansDirectory` set so
+    /// Claude writes plans to `<worktree>/.claude/plans/` instead of the global directory.
+    private func ensureWorktreeClaudeSettings() {
+        guard let worktree = experiment.worktreePath else { return }
+        let settingsDir = (worktree as NSString).appendingPathComponent(".claude")
+        let settingsPath = (settingsDir as NSString).appendingPathComponent("settings.json")
+        let fm = FileManager.default
+
+        if !fm.fileExists(atPath: settingsDir) {
+            try? fm.createDirectory(atPath: settingsDir, withIntermediateDirectories: true)
+        }
+
+        // Merge plansDirectory into existing settings (don't overwrite other keys)
+        var settings: [String: Any] = [:]
+        if let data = fm.contents(atPath: settingsPath),
+           let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            settings = existing
+        }
+        settings["plansDirectory"] = ".claude/plans"
+
+        if let data = try? JSONSerialization.data(withJSONObject: settings, options: .prettyPrinted) {
+            try? data.write(to: URL(fileURLWithPath: settingsPath))
+        }
+    }
+
     private func launchClaudeWithPrompt(_ prompt: String, label: String) {
+        // Ensure the worktree has .claude/settings.json with plansDirectory
+        ensureWorktreeClaudeSettings()
+
         // Write prompt to temp file to avoid shell quoting issues
         let tmpFile = NSTemporaryDirectory() + "erdos-prompt-\(UUID().uuidString).txt"
         try? prompt.write(toFile: tmpFile, atomically: true, encoding: .utf8)
@@ -167,9 +192,8 @@ struct PlanView: View {
         let model = ErdosSettings.shared.defaultModel
         let command = "claude \"$(cat '\(tmpFile)')\" --model \(model) --permission-mode plan --allowed-tools 'Read,Glob,Grep,WebSearch,WebFetch,Task,\"Bash(git log:*)\",\"Bash(git diff:*)\",\"Bash(git show:*)\",\"Bash(git status:*)\",\"Bash(git branch:*)\",\"Bash(git -C:*)\"'; rm -f '\(tmpFile)'"
 
-        // Record launch time so we can find the plan file Claude creates in ~/.claude/plans/
+        // Record launch time so we can find the plan file Claude writes to <worktree>/.claude/plans/
         planLaunchTime = Date()
-        detectedClaudePlanPath = nil
         detectedPlanLastModified = nil
         stablePolls = 0
 
@@ -275,19 +299,14 @@ struct PlanView: View {
 
         let planMdPath = (worktree as NSString).appendingPathComponent("PLAN.md")
 
-        // If actively waiting for a plan from Claude, check ~/.claude/plans/ first
+        // If actively waiting for a plan from Claude, check <worktree>/.claude/plans/
         if let launchTime = planLaunchTime {
-            if let (path, modified, content) = findClaudePlanFile(after: launchTime) {
-                if detectedClaudePlanPath == nil {
-                    // First time seeing this plan file — lock onto it
-                    detectedClaudePlanPath = path
-                    detectedPlanLastModified = modified
-                    stablePolls = 0
-                } else if modified == detectedPlanLastModified {
+            if let (_, modified, content) = findClaudePlanFile(after: launchTime) {
+                if modified == detectedPlanLastModified {
                     // File hasn't changed since last poll
                     stablePolls += 1
                 } else {
-                    // File was updated — reset stability counter
+                    // New or updated file — reset stability counter
                     detectedPlanLastModified = modified
                     stablePolls = 0
                 }
@@ -298,7 +317,6 @@ struct PlanView: View {
                     planContent = content
                     planFilePath = planMdPath
                     planLaunchTime = nil
-                    detectedClaudePlanPath = nil
                     detectedPlanLastModified = nil
                     stablePolls = 0
                     autoRefreshTimer?.invalidate()
@@ -324,22 +342,13 @@ struct PlanView: View {
         planContent = ""
     }
 
-    /// Scan ~/.claude/plans/ for the newest .md file modified after the given date.
+    /// Scan <worktree>/.claude/plans/ for the newest .md file modified after the given date.
     /// Returns (path, modificationDate, content) or nil.
     private func findClaudePlanFile(after launchTime: Date) -> (String, Date, String)? {
-        let plansDir = (NSHomeDirectory() as NSString).appendingPathComponent(".claude/plans")
+        guard let worktree = experiment.worktreePath else { return nil }
+        let plansDir = (worktree as NSString).appendingPathComponent(".claude/plans")
         let fm = FileManager.default
 
-        // If we've already locked onto a file, just check that one
-        if let locked = detectedClaudePlanPath {
-            guard let attrs = try? fm.attributesOfItem(atPath: locked),
-                  let modified = attrs[.modificationDate] as? Date,
-                  let content = try? String(contentsOfFile: locked, encoding: .utf8),
-                  !content.isEmpty else { return nil }
-            return (locked, modified, content)
-        }
-
-        // Otherwise scan for the newest file after launch time
         guard let files = try? fm.contentsOfDirectory(atPath: plansDir) else { return nil }
 
         var bestFile: String?
