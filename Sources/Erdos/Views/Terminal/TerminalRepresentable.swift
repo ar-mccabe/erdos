@@ -34,11 +34,19 @@ struct TerminalRepresentable: NSViewRepresentable {
         // Get shell path
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
 
+        // Build environment with enriched PATH (app bundles get a minimal one)
+        var enriched = ProcessRunner.enrichedEnvironment()
+        // App bundles lack TERM; SwiftTerm needs it for the shell to behave
+        if enriched["TERM"] == nil {
+            enriched["TERM"] = "xterm-256color"
+        }
+        let env = enriched.map { "\($0.key)=\($0.value)" }
+
         // Start the process
         terminal.startProcess(
             executable: shell,
             args: [],
-            environment: nil,
+            environment: env,
             execName: nil
         )
 

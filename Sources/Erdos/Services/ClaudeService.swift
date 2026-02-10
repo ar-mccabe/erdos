@@ -69,6 +69,7 @@ final class ClaudeService {
                 var args = [
                     "-p", prompt,
                     "--output-format", "stream-json",
+                    "--verbose",
                     "--model", model,
                     "--max-turns", "\(maxTurns)",
                 ]

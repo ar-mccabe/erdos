@@ -12,12 +12,23 @@ actor ProcessRunner {
     static let shared = ProcessRunner()
 
     /// Extra PATH entries needed when running from an app bundle
-    private static let extraPaths = [
+    static let extraPaths = [
         "/opt/homebrew/bin",
         "/opt/homebrew/sbin",
         "/usr/local/bin",
         NSHomeDirectory() + "/.local/bin",
     ]
+
+    /// Returns the process environment with extra PATH entries prepended.
+    static func enrichedEnvironment() -> [String: String] {
+        var env = ProcessInfo.processInfo.environment
+        let currentPath = env["PATH"] ?? "/usr/bin:/bin"
+        let missing = extraPaths.filter { !currentPath.contains($0) }
+        if !missing.isEmpty {
+            env["PATH"] = (missing + [currentPath]).joined(separator: ":")
+        }
+        return env
+    }
 
     func run(
         _ executable: String = "/usr/bin/env",
@@ -34,13 +45,7 @@ actor ProcessRunner {
                 process.currentDirectoryURL = URL(fileURLWithPath: dir)
             }
 
-            // Always ensure a usable PATH (app bundles get a minimal one)
-            var env = ProcessInfo.processInfo.environment
-            let currentPath = env["PATH"] ?? "/usr/bin:/bin"
-            let missing = Self.extraPaths.filter { !currentPath.contains($0) }
-            if !missing.isEmpty {
-                env["PATH"] = (missing + [currentPath]).joined(separator: ":")
-            }
+            var env = Self.enrichedEnvironment()
             if let overrides = environment {
                 for (key, value) in overrides { env[key] = value }
             }
