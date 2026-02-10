@@ -222,6 +222,67 @@ final class GitService {
         return result.stdout
     }
 
+    // MARK: - Changed Files (branch vs base)
+
+    enum ChangeSource: String, Sendable {
+        case committed
+        case uncommitted
+        case both
+    }
+
+    struct ChangedFile: Sendable, Identifiable, Hashable {
+        let path: String
+        let source: ChangeSource
+
+        var id: String { path }
+    }
+
+    func getChangedFiles(path: String, baseBranch: String?) async throws -> [ChangedFile] {
+        var committedPaths: Set<String> = []
+        var uncommittedPaths: Set<String> = []
+
+        // Committed changes: files changed on branch vs base
+        if let base = baseBranch {
+            let mergeBaseResult = try await runner.git("merge-base", base, "HEAD", in: path)
+            if mergeBaseResult.succeeded {
+                let mergeBase = mergeBaseResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                let diffResult = try await runner.git("diff", "--name-only", "\(mergeBase)...HEAD", in: path)
+                if diffResult.succeeded {
+                    committedPaths = Set(
+                        diffResult.stdout
+                            .split(separator: "\n", omittingEmptySubsequences: true)
+                            .map(String.init)
+                    )
+                }
+            }
+        }
+
+        // Uncommitted changes: working tree + staged
+        let statusResult = try await runner.git("status", "--porcelain=v1", in: path)
+        if statusResult.succeeded {
+            uncommittedPaths = Set(
+                statusResult.stdout
+                    .split(separator: "\n", omittingEmptySubsequences: true)
+                    .compactMap { line -> String? in
+                        guard line.count >= 4 else { return nil }
+                        return String(line.dropFirst(3))
+                    }
+            )
+        }
+
+        // Merge into deduplicated sorted list
+        let allPaths = committedPaths.union(uncommittedPaths).sorted()
+        return allPaths.map { filePath in
+            let inCommitted = committedPaths.contains(filePath)
+            let inUncommitted = uncommittedPaths.contains(filePath)
+            let source: ChangeSource
+            if inCommitted && inUncommitted { source = .both }
+            else if inCommitted { source = .committed }
+            else { source = .uncommitted }
+            return ChangedFile(path: filePath, source: source)
+        }
+    }
+
     enum GitError: Error, LocalizedError {
         case commandFailed(String)
 
