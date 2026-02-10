@@ -9,6 +9,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
     case sessionEnded
     case branchCreated
     case manual
+    case autoStatusChange
 
     var id: String { rawValue }
 
@@ -21,6 +22,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .sessionEnded: "Session Ended"
         case .branchCreated: "Branch Created"
         case .manual: "Note"
+        case .autoStatusChange: "Auto Status Change"
         }
     }
 
@@ -33,6 +35,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .sessionEnded: "stop.fill"
         case .branchCreated: "arrow.triangle.branch"
         case .manual: "pencil"
+        case .autoStatusChange: "sparkles"
         }
     }
 }

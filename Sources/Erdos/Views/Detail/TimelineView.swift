@@ -96,6 +96,7 @@ struct TimelineView: View {
         case .sessionEnded: .orange
         case .branchCreated: .teal
         case .manual: .secondary
+        case .autoStatusChange: .mint
         }
     }
 }

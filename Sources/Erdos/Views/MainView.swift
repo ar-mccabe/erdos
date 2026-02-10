@@ -49,6 +49,9 @@ struct MainView: View {
         .task {
             await appState.repoDiscovery.scan()
         }
+        .task {
+            appState.statusInference.startMonitoring(container: modelContext.container)
+        }
         .toolbar {
             ToolbarItem(placement: .status) {
                 HStack(spacing: 12) {
