@@ -1,16 +1,10 @@
-```
-                  _
-   ___  _ __ __ _| | ___   ___
-  / _ \| '__/ _` | |/ _ \ / __|
- |  __/| | | (_| | | (_) |\__ \
-  \___||_|  \__,_|_|\___/ |___/
-
-  research experiment lab
-```
+# Erdös
 
 A macOS app for managing research experiments with integrated terminals and Claude Code sessions. Built for the Convictional research team.
 
 Erdos gives each experiment an isolated git worktree, embedded terminal tabs, and Claude integration — so you can run multiple research threads in parallel without stepping on each other.
+
+Named for [Paul Erdös](https://en.wikipedia.org/wiki/Paul_Erd%C5%91s) who was a prolific mathematician famous for his collected '[Erdös Problems](https://en.wikipedia.org/wiki/Paul_Erd%C5%91s#Erd%C5%91s's_problems:~:text=There%20are%20thought%20to%20be%20at%20least%20a%20thousand%20remaining%20unsolved%20problems)' and breadth of collaboration (what's your [Erdös number](https://en.wikipedia.org/wiki/Erd%C5%91s_number)?)
 
 ## Prerequisites
 
