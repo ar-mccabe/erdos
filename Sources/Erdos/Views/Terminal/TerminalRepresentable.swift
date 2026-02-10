@@ -26,10 +26,11 @@ struct TerminalRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> MonitoredTerminalView {
         let terminal = MonitoredTerminalView(frame: .zero)
 
-        // Configure appearance
+        // Configure appearance and scrollback
         terminal.nativeForegroundColor = .textColor
         terminal.nativeBackgroundColor = NSColor(red: 0.12, green: 0.12, blue: 0.14, alpha: 1.0)
         terminal.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        terminal.getTerminal().changeHistorySize(5_000)
 
         // Get shell path
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
