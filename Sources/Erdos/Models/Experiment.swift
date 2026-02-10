@@ -87,6 +87,7 @@ final class Experiment {
     var pausedContext: String?
     var lastActivityAt: Date?
     var manualOverrideUntil: Date?
+    var envVar: String?
 
     @Relationship(deleteRule: .cascade, inverse: \Note.experiment)
     var notes: [Note] = []
@@ -137,5 +138,9 @@ final class Experiment {
 
     var slug: String {
         SlugGenerator.generate(from: title)
+    }
+
+    var isDecideRepo: Bool {
+        repoName == "decide"
     }
 }

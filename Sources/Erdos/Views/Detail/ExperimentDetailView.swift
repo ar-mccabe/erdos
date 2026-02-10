@@ -131,6 +131,9 @@ struct ExperimentDetailView: View {
                 if let branch = experiment.branchName {
                     CopyableLabel(text: branch, icon: "arrow.triangle.branch")
                 }
+                if let envVar = experiment.envVar {
+                    CopyableLabel(text: "ENV=\(envVar)", icon: "terminal", display: "ENV=\(envVar)")
+                }
                 if let status = repoStatus {
                     if status.dirtyFiles > 0 {
                         Label("\(status.dirtyFiles) changed", systemImage: "pencil.circle")
@@ -281,6 +284,21 @@ struct ExperimentDetailView: View {
             modelContext.insert(event)
 
             appState.statusInference.onBranchCreated(experiment: experiment, context: modelContext)
+
+            // Decide repo: generate env var and copy .env.development
+            if experiment.isDecideRepo {
+                let envName = branchName
+                    .replacingOccurrences(of: "-", with: "_")
+                    .replacingOccurrences(of: "[^a-zA-Z0-9_]", with: "", options: .regularExpression)
+                experiment.envVar = envName
+
+                let fm = FileManager.default
+                let sourceEnv = (worktreePath as NSString).appendingPathComponent(".env.development")
+                let targetEnv = (worktreePath as NSString).appendingPathComponent(".env.\(envName)")
+                if fm.fileExists(atPath: sourceEnv) && !fm.fileExists(atPath: targetEnv) {
+                    try? fm.copyItem(atPath: sourceEnv, toPath: targetEnv)
+                }
+            }
 
             await loadStatus()
         } catch {
