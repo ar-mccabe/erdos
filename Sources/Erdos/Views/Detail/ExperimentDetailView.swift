@@ -112,14 +112,10 @@ struct ExperimentDetailView: View {
 
             HStack(spacing: 16) {
                 if !experiment.repoPath.isEmpty {
-                    Label(experiment.repoName, systemImage: "folder")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    CopyableLabel(text: experiment.repoPath, icon: "folder", display: experiment.repoName)
                 }
                 if let branch = experiment.branchName {
-                    Label(branch, systemImage: "arrow.triangle.branch")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    CopyableLabel(text: branch, icon: "arrow.triangle.branch")
                 }
                 if let status = repoStatus {
                     if status.dirtyFiles > 0 {

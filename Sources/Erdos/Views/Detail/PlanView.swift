@@ -18,7 +18,8 @@ struct PlanView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Toolbar
-            HStack {
+            HStack(spacing: 8) {
+                // Left: action buttons
                 if planContent.isEmpty && experiment.worktreePath != nil {
                     Button {
                         launchResearchPlan()
@@ -29,39 +30,21 @@ struct PlanView: View {
                     .controlSize(.small)
                 }
 
-                Spacer()
-
                 if !planContent.isEmpty && experiment.worktreePath != nil {
                     Button {
                         launchUpdatePlan()
                     } label: {
                         Label("Update Plan", systemImage: "arrow.triangle.2.circlepath")
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-
-                if let path = planFilePath {
-                    Text(path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-                        .font(.caption2)
-                        .foregroundStyle(.quaternary)
-
-                    Button(isEditing ? "Preview" : "Edit") {
-                        if isEditing {
-                            savePlan()
-                        } else {
-                            editContent = planContent
-                        }
-                        isEditing.toggle()
-                    }
                     .buttonStyle(.borderless)
                     .font(.caption)
                 }
+
                 if planLaunchTime != nil {
                     HStack(spacing: 4) {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Watching for plan...")
+                        Text("Watching...")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -76,18 +59,44 @@ struct PlanView: View {
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
-                } else {
-                    Button("Refresh") {
-                        Task { await loadPlan() }
+                }
+
+                Spacer()
+
+                // Right: path, edit, refresh
+                if let path = planFilePath {
+                    CopyableLabel(
+                        text: path,
+                        display: path.replacingOccurrences(of: NSHomeDirectory(), with: "~"),
+                        font: .caption2,
+                        color: .quaternary
+                    )
+
+                    Button(isEditing ? "Preview" : "Edit") {
+                        if isEditing {
+                            savePlan()
+                        } else {
+                            editContent = planContent
+                        }
+                        isEditing.toggle()
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
                 }
+
+                if planLaunchTime == nil {
+                    Button {
+                        Task { await loadPlan() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .help("Refresh")
+                }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-
-            Divider()
+            .padding(.vertical, 4)
 
             if isEditing {
                 TextEditor(text: $editContent)
