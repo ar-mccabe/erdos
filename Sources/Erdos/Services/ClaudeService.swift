@@ -55,7 +55,8 @@ final class ClaudeService {
         resumeSessionId: String? = nil,
         model: String = "sonnet",
         permissionMode: ResearchPermissionMode = .readAndWeb,
-        maxBudget: Double = 2.0
+        maxBudget: Double = 2.0,
+        maxTurns: Int = 30
     ) -> AsyncThrowingStream<ClaudeStreamEvent, Error> {
         let claudeExe = claudePath
         let cwd = workingDirectory
@@ -69,7 +70,7 @@ final class ClaudeService {
                     "-p", prompt,
                     "--output-format", "stream-json",
                     "--model", model,
-                    "--max-turns", "30",
+                    "--max-turns", "\(maxTurns)",
                 ]
 
                 // Apply permission mode

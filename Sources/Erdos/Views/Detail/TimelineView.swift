@@ -97,6 +97,8 @@ struct TimelineView: View {
         case .branchCreated: .teal
         case .manual: .secondary
         case .autoStatusChange: .mint
+        case .taskDrafted: .indigo
+        case .taskUpdateDrafted: .indigo
         }
     }
 }
