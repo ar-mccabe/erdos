@@ -65,6 +65,11 @@ final class StatusInferenceService {
     // MARK: - Core Logic
 
     private func processSignal(_ signal: StatusSignal, experiment: Experiment, context: ModelContext) {
+        // Terminal statuses are user-final — never auto-transition out of them
+        if experiment.status == .completed || experiment.status == .abandoned {
+            return
+        }
+
         // Always update activity timestamp on any signal
         experiment.lastActivityAt = Date()
 
