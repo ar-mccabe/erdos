@@ -2,6 +2,8 @@ import SwiftUI
 
 struct PlanView: View {
     @Bindable var experiment: Experiment
+    @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var modelContext
     @State private var isEditing = false
     @State private var editContent = ""
     @State private var planContent = ""
@@ -183,6 +185,8 @@ struct PlanView: View {
             ]
         )
 
+        appState.statusInference.onResearchLaunched(experiment: experiment, context: modelContext)
+
         startAutoRefresh()
     }
 
@@ -303,6 +307,7 @@ struct PlanView: View {
                     stablePolls = 0
                     autoRefreshTimer?.invalidate()
                     autoRefreshTimer = nil
+                    appState.statusInference.onPlanDetected(experiment: experiment, context: modelContext)
                     return
                 }
             }

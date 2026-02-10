@@ -94,6 +94,7 @@ struct ExperimentDetailView: View {
                     set: { newStatus in
                         let old = experiment.status
                         experiment.status = newStatus
+                        experiment.manualOverrideUntil = Date()
                         let event = TimelineEvent(
                             eventType: .statusChange,
                             summary: "Status changed from \(old.label) to \(newStatus.label)"
@@ -263,6 +264,8 @@ struct ExperimentDetailView: View {
             )
             event.experiment = experiment
             modelContext.insert(event)
+
+            appState.statusInference.onBranchCreated(experiment: experiment, context: modelContext)
 
             await loadStatus()
         } catch {

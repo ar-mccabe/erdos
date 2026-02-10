@@ -12,6 +12,7 @@ final class AppState {
     // Services
     let repoDiscovery = RepoDiscoveryService()
     let gitService = GitService()
+    let statusInference = StatusInferenceService()
 
     // Status bar
     var activeSessionCount = 0

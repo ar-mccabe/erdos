@@ -72,6 +72,8 @@ final class Experiment {
     var createdAt: Date
     var updatedAt: Date
     var pausedContext: String?
+    var lastActivityAt: Date?
+    var manualOverrideUntil: Date?
 
     @Relationship(deleteRule: .cascade, inverse: \Note.experiment)
     var notes: [Note] = []
