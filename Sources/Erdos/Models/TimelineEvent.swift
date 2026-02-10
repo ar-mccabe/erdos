@@ -9,6 +9,8 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
     case sessionEnded
     case branchCreated
     case manual
+    case taskDrafted
+    case taskUpdateDrafted
 
     var id: String { rawValue }
 
@@ -21,6 +23,8 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .sessionEnded: "Session Ended"
         case .branchCreated: "Branch Created"
         case .manual: "Note"
+        case .taskDrafted: "Task Drafted"
+        case .taskUpdateDrafted: "Task Update Drafted"
         }
     }
 
@@ -33,6 +37,8 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .sessionEnded: "stop.fill"
         case .branchCreated: "arrow.triangle.branch"
         case .manual: "pencil"
+        case .taskDrafted: "doc.text.fill"
+        case .taskUpdateDrafted: "arrow.uturn.up"
         }
     }
 }
