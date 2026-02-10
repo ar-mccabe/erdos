@@ -117,6 +117,17 @@ final class GitService {
 
         guard result.succeeded else { throw GitError.commandFailed(result.stderr) }
 
+        // Ensure Erdos scratch files are gitignored in the worktree
+        let gitignorePath = "\(worktreePath)/.gitignore"
+        let erdosEntries = ["PLAN.md", "TASK-DRAFT.md"]
+        var existing = (try? String(contentsOfFile: gitignorePath, encoding: .utf8)) ?? ""
+        let linesToAdd = erdosEntries.filter { !existing.contains($0) }
+        if !linesToAdd.isEmpty {
+            if !existing.isEmpty && !existing.hasSuffix("\n") { existing += "\n" }
+            existing += linesToAdd.joined(separator: "\n") + "\n"
+            try? existing.write(toFile: gitignorePath, atomically: true, encoding: .utf8)
+        }
+
         return worktreePath
     }
 
