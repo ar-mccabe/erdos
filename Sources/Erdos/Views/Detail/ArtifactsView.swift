@@ -110,17 +110,17 @@ struct ArtifactsView: View {
             if !documentPaths.isEmpty {
                 Label("\(documentPaths.count) docs", systemImage: "doc.text")
                     .font(.caption)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(ErdosColors.documents)
             }
             if !experiment.notes.isEmpty {
                 Label("\(experiment.notes.count) notes", systemImage: "note.text")
                     .font(.caption)
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(ErdosColors.notes)
             }
             if !changedFiles.isEmpty {
                 Label("\(changedFiles.count) changed", systemImage: "pencil.circle")
                     .font(.caption)
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(ErdosColors.changedFiles)
             }
 
             if let error {

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftUI
 
 enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
     case idea
@@ -33,6 +34,18 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
         case .paused: "pause.circle"
         case .completed: "checkmark.circle"
         case .abandoned: "xmark.circle"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .idea: .purple
+        case .researching: .blue
+        case .planned: .cyan
+        case .active: .green
+        case .paused: .orange
+        case .completed: .gray
+        case .abandoned: .red
         }
     }
 

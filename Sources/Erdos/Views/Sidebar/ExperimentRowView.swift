@@ -13,7 +13,7 @@ struct ExperimentRowView: View {
                     .lineLimit(1)
                 if appState.experimentsWaitingForInput.contains(experiment.id) {
                     Circle()
-                        .fill(.blue)
+                        .fill(ErdosColors.attentionDot)
                         .frame(width: 8, height: 8)
                 }
                 Spacer()

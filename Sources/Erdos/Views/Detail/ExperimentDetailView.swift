@@ -135,7 +135,7 @@ struct ExperimentDetailView: View {
                     if status.dirtyFiles > 0 {
                         Label("\(status.dirtyFiles) changed", systemImage: "pencil.circle")
                             .font(.caption)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(ErdosColors.dirtyIndicator)
                     }
                 }
                 if experiment.worktreePath != nil {

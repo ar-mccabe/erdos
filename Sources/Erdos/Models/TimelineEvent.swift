@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftUI
 
 enum EventType: String, Codable, CaseIterable, Identifiable {
     case statusChange
@@ -42,6 +43,21 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .autoStatusChange: "sparkles"
         case .taskDrafted: "doc.text.fill"
         case .taskUpdateDrafted: "arrow.uturn.up"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .statusChange: .blue
+        case .noteAdded: .purple
+        case .artifactCreated: .cyan
+        case .sessionStarted: .green
+        case .sessionEnded: .orange
+        case .branchCreated: .teal
+        case .manual: .secondary
+        case .autoStatusChange: .mint
+        case .taskDrafted: .indigo
+        case .taskUpdateDrafted: .indigo
         }
     }
 }

@@ -9,20 +9,8 @@ struct StatusBadge: View {
             .fontWeight(.medium)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(backgroundColor.opacity(0.15))
-            .foregroundStyle(backgroundColor)
+            .background(status.color.opacity(0.15))
+            .foregroundStyle(status.color)
             .clipShape(Capsule())
-    }
-
-    private var backgroundColor: Color {
-        switch status {
-        case .idea: .purple
-        case .researching: .blue
-        case .planned: .cyan
-        case .active: .green
-        case .paused: .orange
-        case .completed: .gray
-        case .abandoned: .red
-        }
     }
 }

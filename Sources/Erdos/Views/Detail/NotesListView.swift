@@ -41,7 +41,7 @@ struct NotesListView: View {
                             if note.isPinned {
                                 Image(systemName: "pin.fill")
                                     .font(.caption2)
-                                    .foregroundStyle(.orange)
+                                    .foregroundStyle(ErdosColors.pinnedIcon)
                             }
                             Text(note.title)
                                 .font(.body)

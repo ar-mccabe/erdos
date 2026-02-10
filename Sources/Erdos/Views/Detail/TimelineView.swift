@@ -38,7 +38,7 @@ struct TimelineView: View {
                                 // Timeline dot and line
                                 VStack(spacing: 0) {
                                     Circle()
-                                        .fill(colorFor(event.eventType))
+                                        .fill(event.eventType.color)
                                         .frame(width: 8, height: 8)
                                     Rectangle()
                                         .fill(.quaternary)
@@ -50,7 +50,7 @@ struct TimelineView: View {
                                     HStack {
                                         Image(systemName: event.eventType.icon)
                                             .font(.caption)
-                                            .foregroundStyle(colorFor(event.eventType))
+                                            .foregroundStyle(event.eventType.color)
                                         Text(event.summary)
                                             .font(.body)
                                     }
@@ -85,20 +85,5 @@ struct TimelineView: View {
         event.experiment = experiment
         modelContext.insert(event)
         newEventText = ""
-    }
-
-    private func colorFor(_ type: EventType) -> Color {
-        switch type {
-        case .statusChange: .blue
-        case .noteAdded: .purple
-        case .artifactCreated: .cyan
-        case .sessionStarted: .green
-        case .sessionEnded: .orange
-        case .branchCreated: .teal
-        case .manual: .secondary
-        case .autoStatusChange: .mint
-        case .taskDrafted: .indigo
-        case .taskUpdateDrafted: .indigo
-        }
     }
 }
