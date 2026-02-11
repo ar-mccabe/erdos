@@ -13,6 +13,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
     case autoStatusChange
     case taskDrafted
     case taskUpdateDrafted
+    case noteUpdatedFromFile
 
     var id: String { rawValue }
 
@@ -28,6 +29,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .autoStatusChange: "Auto Status Change"
         case .taskDrafted: "Task Drafted"
         case .taskUpdateDrafted: "Task Update Drafted"
+        case .noteUpdatedFromFile: "Note Synced from File"
         }
     }
 
@@ -43,6 +45,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .autoStatusChange: "sparkles"
         case .taskDrafted: "doc.text.fill"
         case .taskUpdateDrafted: "arrow.uturn.up"
+        case .noteUpdatedFromFile: "arrow.triangle.2.circlepath"
         }
     }
 
@@ -58,6 +61,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .autoStatusChange: .mint
         case .taskDrafted: .indigo
         case .taskUpdateDrafted: .indigo
+        case .noteUpdatedFromFile: .purple
         }
     }
 }

@@ -306,6 +306,12 @@ struct ExperimentDetailView: View {
                 experiment.envVar = envName
             }
 
+            // Seed .erdos/notes/ with existing notes
+            appState.noteSyncService.exportAllNotes(experiment: experiment)
+
+            // Generate CLAUDE.md notes section so Claude Code knows about notes
+            NoteSyncService.ensureClaudeMdNotesSection(worktreePath: worktreePath)
+
             await loadStatus()
         } catch {
             worktreeError = error.localizedDescription

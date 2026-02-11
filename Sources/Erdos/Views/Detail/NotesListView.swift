@@ -1,23 +1,38 @@
 import SwiftUI
 import SwiftData
+import AppKit
 
 struct NotesListView: View {
     @Bindable var experiment: Experiment
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
     @State private var selectedNote: Note?
     @State private var filterType: NoteType?
+    @State private var pollTimer: Timer?
+
+    private var worktreePath: String? { experiment.worktreePath }
 
     var body: some View {
-        if selectedNote != nil {
-            HSplitView {
-                notesList
-                    .frame(minWidth: 200, idealWidth: 250)
-                if let note = selectedNote {
-                    NoteEditorView(note: note)
+        Group {
+            if selectedNote != nil {
+                HSplitView {
+                    notesList
+                        .frame(minWidth: 200, idealWidth: 250)
+                    if let note = selectedNote {
+                        NoteEditorView(note: note, worktreePath: worktreePath)
+                    }
                 }
+            } else {
+                notesList
             }
-        } else {
-            notesList
+        }
+        .task {
+            initialExport()
+            startPolling()
+        }
+        .onDisappear {
+            pollTimer?.invalidate()
+            pollTimer = nil
         }
     }
 
@@ -81,6 +96,18 @@ struct NotesListView: View {
                         note.isPinned.toggle()
                     }
                     Divider()
+                    if let wt = worktreePath {
+                        let filename = NoteSyncService.filename(for: note)
+                        Button("Copy Note") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString("# \(note.title)\n\n\(note.content)", forType: .string)
+                        }
+                        Button("Copy @-reference") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString("@\(wt)/.erdos/notes/\(filename)", forType: .string)
+                        }
+                        Divider()
+                    }
                     Button("Delete", role: .destructive) {
                         deleteNote(note)
                     }
@@ -110,11 +137,52 @@ struct NotesListView: View {
         event.experiment = experiment
         modelContext.insert(event)
 
+        // Export the new note to disk
+        if let wt = worktreePath {
+            appState.noteSyncService.exportNote(note, worktreePath: wt)
+        }
+
         selectedNote = note
     }
 
     private func deleteNote(_ note: Note) {
         if selectedNote == note { selectedNote = nil }
+
+        // Delete the corresponding file on disk
+        if let wt = worktreePath {
+            appState.noteSyncService.deleteNoteFile(note, worktreePath: wt)
+        }
+
         modelContext.delete(note)
+    }
+
+    private func initialExport() {
+        guard worktreePath != nil else { return }
+        appState.noteSyncService.exportAllNotes(experiment: experiment)
+    }
+
+    private func startPolling() {
+        guard let wt = worktreePath else { return }
+        appState.noteSyncService.ensureNotesDirectory(worktreePath: wt)
+
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
+            Task { @MainActor in
+                guard !appState.noteSyncService.isWriting else { return }
+                let events = appState.noteSyncService.importChanges(
+                    worktreePath: wt,
+                    experiment: experiment,
+                    context: modelContext
+                )
+                for event in events {
+                    let timelineEvent = TimelineEvent(
+                        eventType: .noteUpdatedFromFile,
+                        summary: event.summary
+                    )
+                    timelineEvent.experiment = experiment
+                    modelContext.insert(timelineEvent)
+                }
+            }
+        }
     }
 }
