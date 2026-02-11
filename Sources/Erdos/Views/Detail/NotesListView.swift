@@ -1,11 +1,16 @@
 import SwiftUI
 import SwiftData
+import AppKit
 
 struct NotesListView: View {
     @Bindable var experiment: Experiment
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var modelContext
     @State private var selectedNote: Note?
     @State private var filterType: NoteType?
+    @State private var fileWatcher = FileWatcherService()
+
+    private var worktreePath: String? { experiment.worktreePath }
 
     var body: some View {
         if selectedNote != nil {
@@ -13,7 +18,7 @@ struct NotesListView: View {
                 notesList
                     .frame(minWidth: 200, idealWidth: 250)
                 if let note = selectedNote {
-                    NoteEditorView(note: note)
+                    NoteEditorView(note: note, worktreePath: worktreePath)
                 }
             }
         } else {
@@ -81,11 +86,29 @@ struct NotesListView: View {
                         note.isPinned.toggle()
                     }
                     Divider()
+                    if let wt = worktreePath {
+                        let filename = NoteSyncService.filename(for: note)
+                        Button("Copy Note") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString("# \(note.title)\n\n\(note.content)", forType: .string)
+                        }
+                        Button("Copy @-reference") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString("@\(wt)/.erdos/notes/\(filename)", forType: .string)
+                        }
+                        Divider()
+                    }
                     Button("Delete", role: .destructive) {
                         deleteNote(note)
                     }
                 }
             }
+        }
+        .task {
+            await initialSync()
+        }
+        .onDisappear {
+            fileWatcher.stopWatching()
         }
     }
 
@@ -110,11 +133,49 @@ struct NotesListView: View {
         event.experiment = experiment
         modelContext.insert(event)
 
+        // Export the new note to disk
+        if let wt = worktreePath {
+            appState.noteSyncService.exportNote(note, worktreePath: wt)
+        }
+
         selectedNote = note
     }
 
     private func deleteNote(_ note: Note) {
         if selectedNote == note { selectedNote = nil }
+
+        // Delete the corresponding file on disk
+        if let wt = worktreePath {
+            appState.noteSyncService.deleteNoteFile(note, worktreePath: wt)
+        }
+
         modelContext.delete(note)
+    }
+
+    private func initialSync() async {
+        guard let wt = worktreePath else { return }
+
+        // Export all notes to disk on appear
+        appState.noteSyncService.exportAllNotes(experiment: experiment)
+
+        // Start watching .erdos/notes/ for external changes
+        let notesDir = appState.noteSyncService.ensureNotesDirectory(worktreePath: wt)
+        fileWatcher.onFilesChanged = { [weak appState] in
+            guard let appState, !appState.noteSyncService.isWriting else { return }
+            let events = appState.noteSyncService.importChanges(
+                worktreePath: wt,
+                experiment: experiment,
+                context: modelContext
+            )
+            for event in events {
+                let timelineEvent = TimelineEvent(
+                    eventType: .noteUpdatedFromFile,
+                    summary: event.summary
+                )
+                timelineEvent.experiment = experiment
+                modelContext.insert(timelineEvent)
+            }
+        }
+        fileWatcher.startWatching(path: notesDir)
     }
 }
