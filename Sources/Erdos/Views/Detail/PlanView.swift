@@ -28,6 +28,14 @@ struct PlanView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+
+                    Button {
+                        createBlankPlan()
+                    } label: {
+                        Label("Write Plan", systemImage: "square.and.pencil")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 }
 
                 if !planContent.isEmpty && experiment.worktreePath != nil {
@@ -125,19 +133,29 @@ struct PlanView: View {
                 .foregroundStyle(.secondary)
 
             if experiment.worktreePath != nil {
-                Text("Click 'Research Plan' to have Claude explore the codebase and create an implementation plan based on your hypothesis.")
+                Text("Have Claude research a plan, or write one yourself.")
                     .font(.subheadline)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 400)
 
-                Button {
-                    launchResearchPlan()
-                } label: {
-                    Label("Research Plan", systemImage: "sparkles")
+                HStack(spacing: 12) {
+                    Button {
+                        launchResearchPlan()
+                    } label: {
+                        Label("Research Plan", systemImage: "sparkles")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                    Button {
+                        createBlankPlan()
+                    } label: {
+                        Label("Write Plan", systemImage: "square.and.pencil")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
             } else {
                 Text("Create a worktree for this experiment first, then use Research Plan to generate one.")
                     .font(.subheadline)
@@ -148,6 +166,19 @@ struct PlanView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
+    }
+
+    private func createBlankPlan() {
+        guard let worktree = experiment.worktreePath else { return }
+        let path = (worktree as NSString).appendingPathComponent("PLAN.md")
+        let template = "# \(experiment.title)\n\n"
+        if !FileManager.default.fileExists(atPath: path) {
+            try? template.write(toFile: path, atomically: true, encoding: .utf8)
+        }
+        planFilePath = path
+        editContent = (try? String(contentsOfFile: path, encoding: .utf8)) ?? template
+        planContent = editContent
+        isEditing = true
     }
 
     private func launchResearchPlan() {
