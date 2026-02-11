@@ -7,6 +7,7 @@ enum NoteType: String, Codable, CaseIterable, Identifiable {
     case observation
     case decision
     case blocker
+    case archive
 
     var id: String { rawValue }
 
@@ -17,6 +18,7 @@ enum NoteType: String, Codable, CaseIterable, Identifiable {
         case .observation: "Observation"
         case .decision: "Decision"
         case .blocker: "Blocker"
+        case .archive: "Archive"
         }
     }
 
@@ -27,6 +29,7 @@ enum NoteType: String, Codable, CaseIterable, Identifiable {
         case .observation: "eye"
         case .decision: "checkmark.seal"
         case .blocker: "exclamationmark.triangle"
+        case .archive: "archivebox"
         }
     }
 }

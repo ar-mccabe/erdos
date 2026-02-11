@@ -14,6 +14,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
     case taskDrafted
     case taskUpdateDrafted
     case noteUpdatedFromFile
+    case worktreeCleanedUp
 
     var id: String { rawValue }
 
@@ -30,6 +31,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .taskDrafted: "Task Drafted"
         case .taskUpdateDrafted: "Task Update Drafted"
         case .noteUpdatedFromFile: "Note Synced from File"
+        case .worktreeCleanedUp: "Worktree Cleaned Up"
         }
     }
 
@@ -46,6 +48,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .taskDrafted: "doc.text.fill"
         case .taskUpdateDrafted: "arrow.uturn.up"
         case .noteUpdatedFromFile: "arrow.triangle.2.circlepath"
+        case .worktreeCleanedUp: "trash.circle"
         }
     }
 
@@ -62,6 +65,7 @@ enum EventType: String, Codable, CaseIterable, Identifiable {
         case .taskDrafted: .indigo
         case .taskUpdateDrafted: .indigo
         case .noteUpdatedFromFile: .purple
+        case .worktreeCleanedUp: .gray
         }
     }
 }

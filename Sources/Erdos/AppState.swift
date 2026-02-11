@@ -15,6 +15,7 @@ final class AppState {
     let statusInference = StatusInferenceService()
     let gitHubService = GitHubService()
     let noteSyncService = NoteSyncService()
+    let cleanupService = CleanupService()
 
     // Notification dots — experiments with a Claude session waiting for input
     var experimentsWaitingForInput: Set<UUID> = []

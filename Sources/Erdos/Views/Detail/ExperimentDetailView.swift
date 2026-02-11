@@ -14,6 +14,10 @@ struct ExperimentDetailView: View {
     @State private var worktreeError: String?
     @State private var hasWaitingClaudeSession = false
     @State private var headCommit: GitService.CommitInfo?
+    @State private var pendingTerminalStatus: ExperimentStatus?
+    @State private var showCleanupConfirmation = false
+    @State private var isCleaningUp = false
+    @State private var cleanupError: String?
 
     enum DetailTab: String, CaseIterable, Identifiable {
         case plan = "Plan"
@@ -43,6 +47,25 @@ struct ExperimentDetailView: View {
         VStack(spacing: 0) {
             // Header
             experimentHeader
+
+            if isCleaningUp {
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Cleaning up worktree...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.vertical, 4)
+            }
+
+            if let cleanupError {
+                Text(cleanupError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal)
+                    .padding(.vertical, 4)
+            }
 
             Divider()
 
@@ -82,6 +105,29 @@ struct ExperimentDetailView: View {
         .onDisappear {
             appState.experimentsWaitingForInput.remove(experiment.id)
         }
+        .confirmationDialog(
+            "This experiment has a worktree on disk.",
+            isPresented: $showCleanupConfirmation
+        ) {
+            Button("Remove Worktree & Archive Files") {
+                if let status = pendingTerminalStatus {
+                    applyStatusChange(to: status)
+                    pendingTerminalStatus = nil
+                    Task { await performCleanup() }
+                }
+            }
+            Button("Keep Worktree") {
+                if let status = pendingTerminalStatus {
+                    applyStatusChange(to: status)
+                    pendingTerminalStatus = nil
+                }
+            }
+            Button("Cancel", role: .cancel) {
+                pendingTerminalStatus = nil
+            }
+        } message: {
+            Text("Would you like to archive gitignored files (PLAN.md, TASK-DRAFT.md, etc.) and remove the worktree?")
+        }
     }
 
     // MARK: - Header
@@ -108,15 +154,13 @@ struct ExperimentDetailView: View {
                 Picker("Status", selection: Binding(
                     get: { experiment.status },
                     set: { newStatus in
-                        let old = experiment.status
-                        experiment.status = newStatus
-                        experiment.manualOverrideUntil = Date()
-                        let event = TimelineEvent(
-                            eventType: .statusChange,
-                            summary: "Status changed from \(old.label) to \(newStatus.label)"
-                        )
-                        event.experiment = experiment
-                        modelContext.insert(event)
+                        if (newStatus == .completed || newStatus == .abandoned)
+                            && experiment.worktreePath != nil {
+                            pendingTerminalStatus = newStatus
+                            showCleanupConfirmation = true
+                        } else {
+                            applyStatusChange(to: newStatus)
+                        }
                     }
                 )) {
                     ForEach(ExperimentStatus.allCases) { s in
@@ -125,6 +169,7 @@ struct ExperimentDetailView: View {
                 }
                 .pickerStyle(.menu)
                 .frame(width: 160)
+                .disabled(isCleaningUp)
             }
 
             HStack(spacing: 16) {
@@ -318,6 +363,32 @@ struct ExperimentDetailView: View {
         }
 
         isCreatingWorktree = false
+    }
+
+    private func applyStatusChange(to newStatus: ExperimentStatus) {
+        let old = experiment.status
+        experiment.status = newStatus
+        experiment.manualOverrideUntil = Date()
+        let event = TimelineEvent(
+            eventType: .statusChange,
+            summary: "Status changed from \(old.label) to \(newStatus.label)"
+        )
+        event.experiment = experiment
+        modelContext.insert(event)
+    }
+
+    private func performCleanup() async {
+        isCleaningUp = true
+        cleanupError = nil
+        do {
+            try await appState.cleanupService.cleanupWorktree(
+                for: experiment,
+                context: modelContext
+            )
+        } catch {
+            cleanupError = error.localizedDescription
+        }
+        isCleaningUp = false
     }
 }
 
