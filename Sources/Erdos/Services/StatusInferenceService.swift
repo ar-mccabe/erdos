@@ -96,6 +96,10 @@ final class StatusInferenceService {
         case (.idea, .planDetected): return .planned
         case (.researching, .planDetected): return .planned
 
+        // Commit detection → implementing
+        case (.planned, .gitCommitDetected): return .implementing
+        case (.researching, .gitCommitDetected): return .implementing
+
         default: return nil
         }
     }

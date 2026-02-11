@@ -13,6 +13,7 @@ struct ExperimentDetailView: View {
     @State private var isCreatingWorktree = false
     @State private var worktreeError: String?
     @State private var hasWaitingClaudeSession = false
+    @State private var headCommit: GitService.CommitInfo?
 
     enum DetailTab: String, CaseIterable, Identifiable {
         case plan = "Plan"
@@ -130,6 +131,13 @@ struct ExperimentDetailView: View {
                 }
                 if let branch = experiment.branchName {
                     CopyableLabel(text: branch, icon: "arrow.triangle.branch")
+                }
+                if let commit = headCommit {
+                    CopyableLabel(
+                        text: commit.sha,
+                        icon: "number",
+                        display: "\(commit.shortSHA) \(String(commit.message.prefix(40)))"
+                    )
                 }
                 if let envVar = experiment.envVar {
                     CopyableLabel(text: "ENV=\(envVar)", icon: "terminal", display: "ENV=\(envVar)")
@@ -256,6 +264,7 @@ struct ExperimentDetailView: View {
     private func loadStatus() async {
         guard let path = experiment.worktreePath ?? (experiment.repoPath.isEmpty ? nil : experiment.repoPath) else { return }
         repoStatus = try? await appState.gitService.getStatus(path: path)
+        headCommit = try? await appState.gitService.getHeadCommit(path: path)
     }
 
     private func createWorktree() async {
