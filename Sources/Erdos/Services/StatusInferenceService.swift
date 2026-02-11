@@ -3,38 +3,13 @@ import SwiftData
 
 enum StatusSignal {
     case researchLaunched
-    case researchCompleted
     case planDetected
-    case noteAdded
-    case gitActivityDetected
-    case gitCommitDetected
     case branchCreated
 }
 
 @Observable
 @MainActor
 final class StatusInferenceService {
-    private var activityTimer: Timer?
-    private let gitService = GitService()
-
-    /// Grace period after a manual status change during which auto-inference is paused.
-    private let manualOverrideGracePeriod: TimeInterval = 10 * 60 // 10 minutes
-
-    // MARK: - Lifecycle
-
-    func startMonitoring(context: ModelContext) {
-        guard activityTimer == nil else { return }
-        activityTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.checkForStaleness(context: context)
-            }
-        }
-    }
-
-    func stopMonitoring() {
-        activityTimer?.invalidate()
-        activityTimer = nil
-    }
 
     // MARK: - Signal Handlers (called from views)
 
@@ -50,32 +25,12 @@ final class StatusInferenceService {
         processSignal(.branchCreated, experiment: experiment, context: context)
     }
 
-    func onGitActivityDetected(experiment: Experiment, context: ModelContext) {
-        processSignal(.gitActivityDetected, experiment: experiment, context: context)
-    }
-
-    func onGitCommitDetected(experiment: Experiment, context: ModelContext) {
-        processSignal(.gitCommitDetected, experiment: experiment, context: context)
-    }
-
     // MARK: - Core Logic
 
     private func processSignal(_ signal: StatusSignal, experiment: Experiment, context: ModelContext) {
         // Terminal statuses are user-final — never auto-transition out of them
         if experiment.status == .completed || experiment.status == .abandoned || experiment.status == .merged {
             return
-        }
-
-        // Always update activity timestamp on any signal
-        experiment.lastActivityAt = Date()
-
-        // Check manual override (research launched from idea is strong enough to bypass)
-        if let overrideUntil = experiment.manualOverrideUntil {
-            let graceExpired = Date().timeIntervalSince(overrideUntil) > manualOverrideGracePeriod
-            let isStrongSignal = signal == .researchLaunched && experiment.status == .idea
-            if !graceExpired && !isStrongSignal {
-                return
-            }
         }
 
         guard let newStatus = inferTransition(current: experiment.status, signal: signal) else {
@@ -95,10 +50,6 @@ final class StatusInferenceService {
         // Plan detection
         case (.idea, .planDetected): return .planned
         case (.researching, .planDetected): return .planned
-
-        // Commit detection → implementing
-        case (.planned, .gitCommitDetected): return .implementing
-        case (.researching, .gitCommitDetected): return .implementing
 
         default: return nil
         }
@@ -125,35 +76,8 @@ final class StatusInferenceService {
     private func reasonFor(_ signal: StatusSignal) -> String {
         switch signal {
         case .researchLaunched: "Research session started"
-        case .researchCompleted: "Research session completed"
         case .planDetected: "Implementation plan detected"
-        case .noteAdded: "Note added to experiment"
-        case .gitActivityDetected: "File changes detected in worktree"
-        case .gitCommitDetected: "Git commit detected"
         case .branchCreated: "Worktree branch created"
         }
-    }
-
-    // MARK: - Staleness Timer
-
-    private func checkForStaleness(context: ModelContext) async {
-        let descriptor = FetchDescriptor<Experiment>(
-            predicate: #Predicate {
-                $0.statusRaw == "implementing" || $0.statusRaw == "testing" || $0.statusRaw == "researching"
-            }
-        )
-
-        guard let liveExperiments = try? context.fetch(descriptor) else { return }
-
-        for experiment in liveExperiments {
-            if let worktree = experiment.worktreePath {
-                if let status = try? await gitService.getStatus(path: worktree),
-                   status.dirtyFiles > 0 {
-                    experiment.lastActivityAt = Date()
-                }
-            }
-        }
-
-        try? context.save()
     }
 }

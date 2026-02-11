@@ -50,9 +50,6 @@ struct MainView: View {
             await appState.repoDiscovery.scan()
         }
         .task {
-            appState.statusInference.startMonitoring(context: modelContext)
-        }
-        .task {
             // One-time migration: rename "active" → "implementing"
             let descriptor = FetchDescriptor<Experiment>(
                 predicate: #Predicate { $0.statusRaw == "active" }

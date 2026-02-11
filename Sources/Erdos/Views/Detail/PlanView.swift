@@ -179,6 +179,8 @@ struct PlanView: View {
         editContent = (try? String(contentsOfFile: path, encoding: .utf8)) ?? template
         planContent = editContent
         isEditing = true
+
+        appState.statusInference.onPlanDetected(experiment: experiment, context: modelContext)
     }
 
     private func launchResearchPlan() {
@@ -372,6 +374,11 @@ struct PlanView: View {
             planFilePath = planMdPath
             autoRefreshTimer?.invalidate()
             autoRefreshTimer = nil
+
+            // Catch-up: if plan exists but status hasn't advanced past researching, trigger transition
+            if experiment.status == .idea || experiment.status == .researching {
+                appState.statusInference.onPlanDetected(experiment: experiment, context: modelContext)
+            }
             return
         }
 

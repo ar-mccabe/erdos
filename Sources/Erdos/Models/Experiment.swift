@@ -65,13 +65,6 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var isLive: Bool {
-        switch self {
-        case .implementing, .testing, .researching: true
-        default: false
-        }
-    }
-
     /// Sidebar grouping order
     var sortOrder: Int {
         switch self {
@@ -105,8 +98,6 @@ final class Experiment {
     var createdAt: Date
     var updatedAt: Date
     var pausedContext: String?
-    var lastActivityAt: Date?
-    var manualOverrideUntil: Date?
     var envVar: String?
 
     @Relationship(deleteRule: .cascade, inverse: \Note.experiment)

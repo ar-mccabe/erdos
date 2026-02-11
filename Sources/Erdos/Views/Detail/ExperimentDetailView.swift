@@ -368,7 +368,6 @@ struct ExperimentDetailView: View {
     private func applyStatusChange(to newStatus: ExperimentStatus) {
         let old = experiment.status
         experiment.status = newStatus
-        experiment.manualOverrideUntil = Date()
         let event = TimelineEvent(
             eventType: .statusChange,
             summary: "Status changed from \(old.label) to \(newStatus.label)"

@@ -36,7 +36,7 @@ struct TimelineView: View {
     @State private var filter: TimelineFilter = .all
     @State private var selectedCommit: GitService.CommitInfo?
     @State private var autoRefreshTimer: Timer?
-    @State private var lastKnownHead: String?
+
 
     var body: some View {
         VStack(spacing: 0) {
@@ -210,18 +210,6 @@ struct TimelineView: View {
                 baseBranch: experiment.baseBranch
             )
             commits = fetched
-
-            // Detect new commits for status inference
-            if let newHead = fetched.first?.sha, newHead != lastKnownHead {
-                if lastKnownHead != nil {
-                    // HEAD changed — a new commit was detected
-                    appState.statusInference.onGitCommitDetected(
-                        experiment: experiment,
-                        context: modelContext
-                    )
-                }
-                lastKnownHead = newHead
-            }
         } catch {
             // Silently fail — commits are supplemental
         }
