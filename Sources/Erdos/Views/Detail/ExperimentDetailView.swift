@@ -285,7 +285,7 @@ struct ExperimentDetailView: View {
 
             appState.statusInference.onBranchCreated(experiment: experiment, context: modelContext)
 
-            // Decide repo: generate env var and copy .env.development
+            // Decide repo: generate env var and copy gitignored .env.* files from main repo
             if experiment.isDecideRepo {
                 let envName = branchName
                     .replacingOccurrences(of: "-", with: "_")
@@ -293,10 +293,23 @@ struct ExperimentDetailView: View {
                 experiment.envVar = envName
 
                 let fm = FileManager.default
+
+                // Copy .env.development → .env.<envName> for this experiment
                 let sourceEnv = (worktreePath as NSString).appendingPathComponent(".env.development")
                 let targetEnv = (worktreePath as NSString).appendingPathComponent(".env.\(envName)")
                 if fm.fileExists(atPath: sourceEnv) && !fm.fileExists(atPath: targetEnv) {
                     try? fm.copyItem(atPath: sourceEnv, toPath: targetEnv)
+                }
+
+                // Copy all gitignored .env.* files from main repo (e.g. .env.secrets, .env.evals)
+                if let repoFiles = try? fm.contentsOfDirectory(atPath: experiment.repoPath) {
+                    for file in repoFiles where file.hasPrefix(".env.") {
+                        let source = (experiment.repoPath as NSString).appendingPathComponent(file)
+                        let target = (worktreePath as NSString).appendingPathComponent(file)
+                        if fm.fileExists(atPath: source) && !fm.fileExists(atPath: target) {
+                            try? fm.copyItem(atPath: source, toPath: target)
+                        }
+                    }
                 }
             }
 
