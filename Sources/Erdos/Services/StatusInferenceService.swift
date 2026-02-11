@@ -22,11 +22,11 @@ final class StatusInferenceService {
 
     // MARK: - Lifecycle
 
-    func startMonitoring(container: ModelContainer) {
+    func startMonitoring(context: ModelContext) {
         guard activityTimer == nil else { return }
         activityTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.checkForStaleness(container: container)
+                await self?.checkForStaleness(context: context)
             }
         }
     }
@@ -136,9 +136,7 @@ final class StatusInferenceService {
 
     // MARK: - Staleness Timer
 
-    private func checkForStaleness(container: ModelContainer) {
-        let context = ModelContext(container)
-
+    private func checkForStaleness(context: ModelContext) async {
         let descriptor = FetchDescriptor<Experiment>(
             predicate: #Predicate {
                 $0.statusRaw == "implementing" || $0.statusRaw == "testing" || $0.statusRaw == "researching"
@@ -149,11 +147,9 @@ final class StatusInferenceService {
 
         for experiment in liveExperiments {
             if let worktree = experiment.worktreePath {
-                Task {
-                    if let status = try? await gitService.getStatus(path: worktree),
-                       status.dirtyFiles > 0 {
-                        experiment.lastActivityAt = Date()
-                    }
+                if let status = try? await gitService.getStatus(path: worktree),
+                   status.dirtyFiles > 0 {
+                    experiment.lastActivityAt = Date()
                 }
             }
         }

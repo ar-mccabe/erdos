@@ -50,7 +50,7 @@ struct MainView: View {
             await appState.repoDiscovery.scan()
         }
         .task {
-            appState.statusInference.startMonitoring(container: modelContext.container)
+            appState.statusInference.startMonitoring(context: modelContext)
         }
         .task {
             // One-time migration: rename "active" → "implementing"
