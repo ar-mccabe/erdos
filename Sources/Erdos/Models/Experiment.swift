@@ -163,7 +163,4 @@ final class Experiment {
         SlugGenerator.generate(from: title)
     }
 
-    var isDecideRepo: Bool {
-        repoName == "decide"
-    }
 }

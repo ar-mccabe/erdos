@@ -285,40 +285,12 @@ struct ExperimentDetailView: View {
 
             appState.statusInference.onBranchCreated(experiment: experiment, context: modelContext)
 
-            // Decide repo: generate env var and copy gitignored .env.* files from main repo
-            if experiment.isDecideRepo {
-                let envName = branchName
-                    .replacingOccurrences(of: "-", with: "_")
-                    .replacingOccurrences(of: "[^a-zA-Z0-9_]", with: "", options: .regularExpression)
+            if let envName = WorktreeSetupService.applyConfig(
+                repoPath: experiment.repoPath,
+                worktreePath: worktreePath,
+                branchName: branchName
+            ) {
                 experiment.envVar = envName
-
-                let fm = FileManager.default
-
-                // Copy .env.development → .env.<envName> for this experiment
-                let sourceEnv = (worktreePath as NSString).appendingPathComponent(".env.development")
-                let targetEnv = (worktreePath as NSString).appendingPathComponent(".env.\(envName)")
-                if fm.fileExists(atPath: sourceEnv) && !fm.fileExists(atPath: targetEnv) {
-                    try? fm.copyItem(atPath: sourceEnv, toPath: targetEnv)
-                }
-
-                // Copy all gitignored .env.* files from main repo root and experiments/
-                for subdir in ["", "experiments"] {
-                    let sourceDir = subdir.isEmpty
-                        ? experiment.repoPath
-                        : (experiment.repoPath as NSString).appendingPathComponent(subdir)
-                    let targetDir = subdir.isEmpty
-                        ? worktreePath
-                        : (worktreePath as NSString).appendingPathComponent(subdir)
-                    if let files = try? fm.contentsOfDirectory(atPath: sourceDir) {
-                        for file in files where file.hasPrefix(".env") {
-                            let source = (sourceDir as NSString).appendingPathComponent(file)
-                            let target = (targetDir as NSString).appendingPathComponent(file)
-                            if fm.fileExists(atPath: source) && !fm.fileExists(atPath: target) {
-                                try? fm.copyItem(atPath: source, toPath: target)
-                            }
-                        }
-                    }
-                }
             }
 
             await loadStatus()

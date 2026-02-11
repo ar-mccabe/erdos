@@ -69,6 +69,27 @@ Experiments go through statuses automatically: Idea -> Researching -> Planned ->
 
 A blue notification dot appears in the sidebar when a Claude session is waiting for your input.
 
+## Repo configuration (`.erdos.yml`)
+
+Repos can declare a `.erdos.yml` file in their root to configure what happens when Erdos creates a worktree. This is useful for copying gitignored files (like `.env` secrets) into new worktrees automatically.
+
+```yaml
+# .erdos.yml
+worktree:
+  copy_files:           # gitignored files to copy from main repo into worktrees
+    - .env*             # trailing wildcard — copies all files matching the prefix
+    - experiments/.env* # works in subdirectories too
+  env_var:
+    from_branch: true           # generate an ENV name from the branch name
+    copy_base: .env.development # copy this file as .env.<envName> in the worktree
+```
+
+All fields are optional. If no `.erdos.yml` exists, worktree creation works as normal with no extra steps.
+
+**`copy_files`** — Each entry is either an explicit file path or a trailing-wildcard pattern. Files are copied from the main repo into the worktree, preserving subdirectory structure. Missing files are silently skipped.
+
+**`env_var`** — When `from_branch` is true, Erdos generates an env var name from the branch (replacing hyphens with underscores, stripping special characters). If `copy_base` is set, that file is copied as `.env.<envName>` in the worktree. The env var name is shown in the experiment header as a copyable `ENV=<name>` label.
+
 ## Developing Erdos with Claude Code
 
 The app is a standard Swift Package Manager project — no Xcode project file needed. Claude Code works well for making changes:
@@ -96,7 +117,7 @@ Sources/Erdos/
     Detail/        # Tabs: Plan, Notes, Artifacts, Timeline, Changes, Tasks
     Terminal/      # Terminal panel, MonitoredTerminalView
     Components/    # StatusBadge, CopyableLabel, ErdosColors
-  Services/        # GitService, ClaudeService, StatusInferenceService
+  Services/        # GitService, ClaudeService, StatusInferenceService, WorktreeSetupService
   Utilities/       # ProcessRunner, SlugGenerator, StreamJSONParser
 scripts/
   bundle.sh        # Assembles .app bundle for make install
