@@ -9,7 +9,6 @@ enum StatusSignal {
     case gitActivityDetected
     case gitCommitDetected
     case branchCreated
-    case activityTimeout
 }
 
 @Observable
@@ -20,9 +19,6 @@ final class StatusInferenceService {
 
     /// Grace period after a manual status change during which auto-inference is paused.
     private let manualOverrideGracePeriod: TimeInterval = 10 * 60 // 10 minutes
-
-    /// How long without activity before an active experiment is considered paused.
-    private let activityTimeoutInterval: TimeInterval = 2 * 60 * 60 // 2 hours
 
     // MARK: - Lifecycle
 
@@ -66,7 +62,7 @@ final class StatusInferenceService {
 
     private func processSignal(_ signal: StatusSignal, experiment: Experiment, context: ModelContext) {
         // Terminal statuses are user-final — never auto-transition out of them
-        if experiment.status == .completed || experiment.status == .abandoned {
+        if experiment.status == .completed || experiment.status == .abandoned || experiment.status == .merged {
             return
         }
 
@@ -100,18 +96,6 @@ final class StatusInferenceService {
         case (.idea, .planDetected): return .planned
         case (.researching, .planDetected): return .planned
 
-        // Activation from planned
-        case (.planned, .gitActivityDetected): return .active
-        case (.planned, .gitCommitDetected): return .active
-
-        // Staleness
-        case (.active, .activityTimeout): return .paused
-
-        // Resume from paused
-        case (.paused, .gitActivityDetected): return .active
-        case (.paused, .researchLaunched): return .active
-        case (.paused, .gitCommitDetected): return .active
-
         default: return nil
         }
     }
@@ -143,7 +127,6 @@ final class StatusInferenceService {
         case .gitActivityDetected: "File changes detected in worktree"
         case .gitCommitDetected: "Git commit detected"
         case .branchCreated: "Worktree branch created"
-        case .activityTimeout: "No activity for extended period"
         }
     }
 
@@ -153,43 +136,19 @@ final class StatusInferenceService {
         let context = ModelContext(container)
 
         let descriptor = FetchDescriptor<Experiment>(
-            predicate: #Predicate { $0.statusRaw == "active" }
+            predicate: #Predicate {
+                $0.statusRaw == "implementing" || $0.statusRaw == "testing" || $0.statusRaw == "researching"
+            }
         )
 
-        guard let activeExperiments = try? context.fetch(descriptor) else { return }
+        guard let liveExperiments = try? context.fetch(descriptor) else { return }
 
-        for experiment in activeExperiments {
-            // Check activity timeout
-            if let lastActivity = experiment.lastActivityAt,
-               Date().timeIntervalSince(lastActivity) > activityTimeoutInterval {
-                processSignal(.activityTimeout, experiment: experiment, context: context)
-                continue
-            }
-
-            // Check worktree for external git activity
+        for experiment in liveExperiments {
             if let worktree = experiment.worktreePath {
                 Task {
                     if let status = try? await gitService.getStatus(path: worktree),
                        status.dirtyFiles > 0 {
                         experiment.lastActivityAt = Date()
-                    }
-                }
-            }
-        }
-
-        // Also check planned experiments for git activity (could mean they became active)
-        let plannedDescriptor = FetchDescriptor<Experiment>(
-            predicate: #Predicate { $0.statusRaw == "planned" }
-        )
-
-        if let plannedExperiments = try? context.fetch(plannedDescriptor) {
-            for experiment in plannedExperiments {
-                if let worktree = experiment.worktreePath {
-                    Task {
-                        if let status = try? await gitService.getStatus(path: worktree),
-                           status.dirtyFiles > 0 {
-                            processSignal(.gitActivityDetected, experiment: experiment, context: context)
-                        }
                     }
                 }
             }

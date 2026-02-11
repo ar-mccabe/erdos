@@ -121,7 +121,7 @@ struct ExperimentDetailView: View {
                     }
                 }
                 .pickerStyle(.menu)
-                .frame(width: 140)
+                .frame(width: 160)
             }
 
             HStack(spacing: 16) {

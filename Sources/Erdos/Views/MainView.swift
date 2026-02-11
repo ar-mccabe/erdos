@@ -52,6 +52,18 @@ struct MainView: View {
         .task {
             appState.statusInference.startMonitoring(container: modelContext.container)
         }
+        .task {
+            // One-time migration: rename "active" → "implementing"
+            let descriptor = FetchDescriptor<Experiment>(
+                predicate: #Predicate { $0.statusRaw == "active" }
+            )
+            if let stale = try? modelContext.fetch(descriptor) {
+                for experiment in stale {
+                    experiment.statusRaw = ExperimentStatus.implementing.rawValue
+                }
+                try? modelContext.save()
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .status) {
                 HStack(spacing: 12) {

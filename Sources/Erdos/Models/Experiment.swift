@@ -6,8 +6,12 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
     case idea
     case researching
     case planned
-    case active
+    case implementing
+    case testing
+    case inReview
+    case blocked
     case paused
+    case merged
     case completed
     case abandoned
 
@@ -18,8 +22,12 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
         case .idea: "Idea"
         case .researching: "Researching"
         case .planned: "Planned"
-        case .active: "Active"
+        case .implementing: "Implementing"
+        case .testing: "Testing"
+        case .inReview: "In Review"
+        case .blocked: "Blocked"
         case .paused: "Paused"
+        case .merged: "Merged"
         case .completed: "Completed"
         case .abandoned: "Abandoned"
         }
@@ -30,8 +38,12 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
         case .idea: "lightbulb"
         case .researching: "magnifyingglass"
         case .planned: "list.bullet.clipboard"
-        case .active: "play.circle"
+        case .implementing: "hammer"
+        case .testing: "flask"
+        case .inReview: "eye"
+        case .blocked: "exclamationmark.triangle"
         case .paused: "pause.circle"
+        case .merged: "arrow.triangle.merge"
         case .completed: "checkmark.circle"
         case .abandoned: "xmark.circle"
         }
@@ -42,16 +54,20 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
         case .idea: .purple
         case .researching: .blue
         case .planned: .cyan
-        case .active: .green
+        case .implementing: .green
+        case .testing: .teal
+        case .inReview: .indigo
+        case .blocked: .red
         case .paused: .orange
+        case .merged: .mint
         case .completed: .gray
-        case .abandoned: .red
+        case .abandoned: .secondary
         }
     }
 
     var isLive: Bool {
         switch self {
-        case .active, .researching: true
+        case .implementing, .testing, .researching: true
         default: false
         }
     }
@@ -59,13 +75,17 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
     /// Sidebar grouping order
     var sortOrder: Int {
         switch self {
-        case .active: 0
-        case .researching: 1
-        case .planned: 2
-        case .idea: 3
-        case .paused: 4
-        case .completed: 5
-        case .abandoned: 6
+        case .implementing: 0
+        case .testing: 1
+        case .researching: 2
+        case .inReview: 3
+        case .blocked: 4
+        case .merged: 5
+        case .planned: 6
+        case .idea: 7
+        case .paused: 8
+        case .completed: 9
+        case .abandoned: 10
         }
     }
 }
@@ -102,7 +122,10 @@ final class Experiment {
     var timeline: [TimelineEvent] = []
 
     var status: ExperimentStatus {
-        get { ExperimentStatus(rawValue: statusRaw) ?? .idea }
+        get {
+            if statusRaw == "active" { return .implementing }
+            return ExperimentStatus(rawValue: statusRaw) ?? .idea
+        }
         set {
             statusRaw = newValue.rawValue
             updatedAt = Date()

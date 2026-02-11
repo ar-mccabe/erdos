@@ -67,7 +67,7 @@ struct NewExperimentSheet: View {
                     TextField("Detail", text: $detail, prompt: Text("Additional context (markdown)"), axis: .vertical)
                         .lineLimit(3...8)
                     Picker("Initial Status", selection: $status) {
-                        ForEach([ExperimentStatus.idea, .researching, .planned, .active]) { s in
+                        ForEach([ExperimentStatus.idea, .researching, .planned, .implementing]) { s in
                             Label(s.label, systemImage: s.icon).tag(s)
                         }
                     }
