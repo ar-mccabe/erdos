@@ -294,6 +294,79 @@ final class GitService {
         }
     }
 
+    // MARK: - Commit Log
+
+    struct CommitInfo: Sendable, Identifiable, Hashable {
+        let sha: String        // full 40-char
+        let shortSHA: String   // 7-char
+        let message: String    // first line of commit message
+        let author: String
+        let date: Date
+        var id: String { sha }
+    }
+
+    private static let commitFieldSeparator = "<%>"
+    private static let commitRecordSeparator = "<%END%>"
+    private static let commitFormat = ["%H", "%h", "%s", "%an", "%aI"]
+        .joined(separator: commitFieldSeparator)
+
+    func getCommitLog(path: String, baseBranch: String?, limit: Int = 100) async throws -> [CommitInfo] {
+        var args = ["log", "--format=\(Self.commitFormat)\(Self.commitRecordSeparator)", "-n", "\(limit)"]
+        if let base = baseBranch {
+            // Only use range if baseBranch actually resolves
+            let check = try await runner.git("merge-base", base, "HEAD", in: path)
+            if check.succeeded {
+                let mergeBase = check.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+                args.insert("\(mergeBase)..HEAD", at: 1)
+            }
+        }
+
+        let result = try await runner.run("/usr/bin/git", arguments: args, currentDirectory: path)
+        guard result.succeeded else { throw GitError.commandFailed(result.stderr) }
+        return parseCommitLog(result.stdout)
+    }
+
+    func getHeadCommit(path: String) async throws -> CommitInfo? {
+        let args = ["log", "-1", "--format=\(Self.commitFormat)\(Self.commitRecordSeparator)"]
+        let result = try await runner.run("/usr/bin/git", arguments: args, currentDirectory: path)
+        guard result.succeeded else { return nil }
+        return parseCommitLog(result.stdout).first
+    }
+
+    func getCommitDiff(path: String, sha: String) async throws -> String {
+        let args = ["show", "--patch-with-stat", "--no-color", sha]
+        let result = try await runner.run("/usr/bin/git", arguments: args, currentDirectory: path)
+        guard result.succeeded else { throw GitError.commandFailed(result.stderr) }
+        let output = result.stdout
+        // Truncate very large diffs
+        if output.count > 50_000 {
+            return String(output.prefix(50_000)) + "\n\n--- Diff truncated (exceeds 50KB) ---"
+        }
+        return output
+    }
+
+    private func parseCommitLog(_ output: String) -> [CommitInfo] {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+
+        return output
+            .components(separatedBy: Self.commitRecordSeparator)
+            .compactMap { record -> CommitInfo? in
+                let trimmed = record.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return nil }
+                let fields = trimmed.components(separatedBy: Self.commitFieldSeparator)
+                guard fields.count == 5 else { return nil }
+                let date = formatter.date(from: fields[4]) ?? Date()
+                return CommitInfo(
+                    sha: fields[0],
+                    shortSHA: fields[1],
+                    message: fields[2],
+                    author: fields[3],
+                    date: date
+                )
+            }
+    }
+
     enum GitError: Error, LocalizedError {
         case commandFailed(String)
 
