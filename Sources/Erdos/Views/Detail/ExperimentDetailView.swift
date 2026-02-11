@@ -301,13 +301,21 @@ struct ExperimentDetailView: View {
                     try? fm.copyItem(atPath: sourceEnv, toPath: targetEnv)
                 }
 
-                // Copy all gitignored .env.* files from main repo (e.g. .env.secrets, .env.evals)
-                if let repoFiles = try? fm.contentsOfDirectory(atPath: experiment.repoPath) {
-                    for file in repoFiles where file.hasPrefix(".env.") {
-                        let source = (experiment.repoPath as NSString).appendingPathComponent(file)
-                        let target = (worktreePath as NSString).appendingPathComponent(file)
-                        if fm.fileExists(atPath: source) && !fm.fileExists(atPath: target) {
-                            try? fm.copyItem(atPath: source, toPath: target)
+                // Copy all gitignored .env.* files from main repo root and experiments/
+                for subdir in ["", "experiments"] {
+                    let sourceDir = subdir.isEmpty
+                        ? experiment.repoPath
+                        : (experiment.repoPath as NSString).appendingPathComponent(subdir)
+                    let targetDir = subdir.isEmpty
+                        ? worktreePath
+                        : (worktreePath as NSString).appendingPathComponent(subdir)
+                    if let files = try? fm.contentsOfDirectory(atPath: sourceDir) {
+                        for file in files where file.hasPrefix(".env") {
+                            let source = (sourceDir as NSString).appendingPathComponent(file)
+                            let target = (targetDir as NSString).appendingPathComponent(file)
+                            if fm.fileExists(atPath: source) && !fm.fileExists(atPath: target) {
+                                try? fm.copyItem(atPath: source, toPath: target)
+                            }
                         }
                     }
                 }
