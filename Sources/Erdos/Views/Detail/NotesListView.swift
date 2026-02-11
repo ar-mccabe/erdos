@@ -100,7 +100,8 @@ struct NotesListView: View {
     }
 
     private func addNote() {
-        let note = Note(title: "New Note")
+        let noteType = filterType ?? .general
+        let note = Note(title: "New Note", noteType: noteType)
         note.experiment = experiment
         modelContext.insert(note)
 
