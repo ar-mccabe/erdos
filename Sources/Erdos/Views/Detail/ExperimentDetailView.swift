@@ -21,6 +21,7 @@ struct ExperimentDetailView: View {
         case artifacts = "Artifacts"
         case timeline = "Timeline"
         case changes = "Changes"
+        case pullRequests = "Pull Requests"
         case tasks = "Tasks"
 
         var id: String { rawValue }
@@ -32,6 +33,7 @@ struct ExperimentDetailView: View {
             case .artifacts: "doc.on.doc"
             case .timeline: "clock"
             case .changes: "arrow.triangle.pull"
+            case .pullRequests: "text.bubble"
             case .tasks: "checklist"
             }
         }
@@ -232,6 +234,8 @@ struct ExperimentDetailView: View {
             TimelineView(experiment: experiment)
         case .changes:
             ChangesView(experiment: experiment)
+        case .pullRequests:
+            PullRequestsView(experiment: experiment)
         case .tasks:
             TaskDraftView(experiment: experiment)
         }

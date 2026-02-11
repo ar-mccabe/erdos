@@ -3,13 +3,21 @@ import WebKit
 
 struct MarkdownContentView: View {
     let content: String
+    var dynamicHeight: Bool = false
+
+    @State private var measuredHeight: CGFloat = 44
 
     var body: some View {
-        MarkdownWebView(markdown: content)
+        if dynamicHeight {
+            SelfSizingMarkdownWebView(markdown: content, measuredHeight: $measuredHeight)
+                .frame(height: measuredHeight)
+        } else {
+            MarkdownWebView(markdown: content)
+        }
     }
 }
 
-// MARK: - WKWebView wrapper for rendered markdown
+// MARK: - Standard WKWebView wrapper (fills available space, scrolls internally)
 
 struct MarkdownWebView: NSViewRepresentable {
     let markdown: String
@@ -27,9 +35,62 @@ struct MarkdownWebView: NSViewRepresentable {
     }
 
     private func loadHTML(into webView: WKWebView) {
-        let html = Self.buildHTML(markdown: markdown)
+        let html = MarkdownWebViewHelper.buildHTML(markdown: markdown)
         webView.loadHTMLString(html, baseURL: nil)
     }
+}
+
+// MARK: - Self-sizing WKWebView wrapper (measures content height for ScrollView contexts)
+
+struct SelfSizingMarkdownWebView: NSViewRepresentable {
+    let markdown: String
+    @Binding var measuredHeight: CGFloat
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.setValue(false, forKey: "drawsBackground")
+        webView.navigationDelegate = context.coordinator
+        loadHTML(into: webView)
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.parent = self
+        loadHTML(into: webView)
+    }
+
+    private func loadHTML(into webView: WKWebView) {
+        let html = MarkdownWebViewHelper.buildHTML(markdown: markdown)
+        webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    class Coordinator: NSObject, WKNavigationDelegate {
+        var parent: SelfSizingMarkdownWebView
+
+        init(_ parent: SelfSizingMarkdownWebView) {
+            self.parent = parent
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            webView.evaluateJavaScript("document.body.scrollHeight") { result, _ in
+                if let height = result as? CGFloat, height > 0 {
+                    DispatchQueue.main.async {
+                        self.parent.measuredHeight = height
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Shared HTML/Markdown helpers
+
+enum MarkdownWebViewHelper {
 
     // MARK: - Markdown to HTML
 

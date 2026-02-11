@@ -13,6 +13,7 @@ final class AppState {
     let repoDiscovery = RepoDiscoveryService()
     let gitService = GitService()
     let statusInference = StatusInferenceService()
+    let gitHubService = GitHubService()
 
     // Notification dots — experiments with a Claude session waiting for input
     var experimentsWaitingForInput: Set<UUID> = []
