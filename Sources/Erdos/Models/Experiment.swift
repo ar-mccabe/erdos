@@ -75,15 +75,15 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
     /// Sidebar grouping order
     var sortOrder: Int {
         switch self {
-        case .implementing: 0
-        case .testing: 1
-        case .researching: 2
-        case .inReview: 3
+        case .idea: 0
+        case .researching: 1
+        case .planned: 2
+        case .paused: 3
         case .blocked: 4
-        case .merged: 5
-        case .planned: 6
-        case .idea: 7
-        case .paused: 8
+        case .implementing: 5
+        case .testing: 6
+        case .inReview: 7
+        case .merged: 8
         case .completed: 9
         case .abandoned: 10
         }
