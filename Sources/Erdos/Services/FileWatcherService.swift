@@ -23,15 +23,18 @@ final class FileWatcherService {
             queue: .global(qos: .utility)
         )
 
-        source?.setEventHandler { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.lastChangeDate = Date()
-                self?.onFilesChanged?()
+        // Capture callback and fd by value — never capture self in dispatch source
+        // handlers, since they fire on a background queue and self is @MainActor.
+        let onChange = onFilesChanged
+        source?.setEventHandler {
+            DispatchQueue.main.async {
+                onChange?()
             }
         }
 
-        source?.setCancelHandler { [weak self] in
-            if let fd = self?.fileDescriptor, fd >= 0 {
+        let fd = fileDescriptor
+        source?.setCancelHandler {
+            if fd >= 0 {
                 close(fd)
             }
         }

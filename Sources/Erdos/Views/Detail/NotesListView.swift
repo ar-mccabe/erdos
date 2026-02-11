@@ -8,21 +8,31 @@ struct NotesListView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var selectedNote: Note?
     @State private var filterType: NoteType?
-    @State private var fileWatcher = FileWatcherService()
+    @State private var pollTimer: Timer?
 
     private var worktreePath: String? { experiment.worktreePath }
 
     var body: some View {
-        if selectedNote != nil {
-            HSplitView {
-                notesList
-                    .frame(minWidth: 200, idealWidth: 250)
-                if let note = selectedNote {
-                    NoteEditorView(note: note, worktreePath: worktreePath)
+        Group {
+            if selectedNote != nil {
+                HSplitView {
+                    notesList
+                        .frame(minWidth: 200, idealWidth: 250)
+                    if let note = selectedNote {
+                        NoteEditorView(note: note, worktreePath: worktreePath)
+                    }
                 }
+            } else {
+                notesList
             }
-        } else {
-            notesList
+        }
+        .task {
+            initialExport()
+            startPolling()
+        }
+        .onDisappear {
+            pollTimer?.invalidate()
+            pollTimer = nil
         }
     }
 
@@ -104,12 +114,6 @@ struct NotesListView: View {
                 }
             }
         }
-        .task {
-            await initialSync()
-        }
-        .onDisappear {
-            fileWatcher.stopWatching()
-        }
     }
 
     private var filteredNotes: [Note] {
@@ -152,30 +156,33 @@ struct NotesListView: View {
         modelContext.delete(note)
     }
 
-    private func initialSync() async {
-        guard let wt = worktreePath else { return }
-
-        // Export all notes to disk on appear
+    private func initialExport() {
+        guard worktreePath != nil else { return }
         appState.noteSyncService.exportAllNotes(experiment: experiment)
+    }
 
-        // Start watching .erdos/notes/ for external changes
-        let notesDir = appState.noteSyncService.ensureNotesDirectory(worktreePath: wt)
-        fileWatcher.onFilesChanged = { [weak appState] in
-            guard let appState, !appState.noteSyncService.isWriting else { return }
-            let events = appState.noteSyncService.importChanges(
-                worktreePath: wt,
-                experiment: experiment,
-                context: modelContext
-            )
-            for event in events {
-                let timelineEvent = TimelineEvent(
-                    eventType: .noteUpdatedFromFile,
-                    summary: event.summary
+    private func startPolling() {
+        guard let wt = worktreePath else { return }
+        appState.noteSyncService.ensureNotesDirectory(worktreePath: wt)
+
+        pollTimer?.invalidate()
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
+            Task { @MainActor in
+                guard !appState.noteSyncService.isWriting else { return }
+                let events = appState.noteSyncService.importChanges(
+                    worktreePath: wt,
+                    experiment: experiment,
+                    context: modelContext
                 )
-                timelineEvent.experiment = experiment
-                modelContext.insert(timelineEvent)
+                for event in events {
+                    let timelineEvent = TimelineEvent(
+                        eventType: .noteUpdatedFromFile,
+                        summary: event.summary
+                    )
+                    timelineEvent.experiment = experiment
+                    modelContext.insert(timelineEvent)
+                }
             }
         }
-        fileWatcher.startWatching(path: notesDir)
     }
 }
