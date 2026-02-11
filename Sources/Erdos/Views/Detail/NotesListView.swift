@@ -8,82 +8,83 @@ struct NotesListView: View {
     @State private var filterType: NoteType?
 
     var body: some View {
-        HSplitView {
-            // Notes list
-            VStack(spacing: 0) {
-                // Filter bar
-                HStack {
-                    Picker("Filter", selection: $filterType) {
-                        Text("All").tag(nil as NoteType?)
-                        ForEach(NoteType.allCases) { type in
-                            Label(type.label, systemImage: type.icon).tag(type as NoteType?)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-
-                    Spacer()
-
-                    Button {
-                        addNote()
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.borderless)
-                }
-                .padding(8)
-
-                Divider()
-
-                List(filteredNotes, selection: $selectedNote) { note in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack {
-                            if note.isPinned {
-                                Image(systemName: "pin.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(ErdosColors.pinnedIcon)
-                            }
-                            Text(note.title)
-                                .font(.body)
-                                .fontWeight(.medium)
-                                .lineLimit(1)
-                            Spacer()
-                            Image(systemName: note.noteType.icon)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(note.content.prefix(80))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                        Text(note.updatedAt, style: .relative)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.vertical, 2)
-                    .tag(note)
-                    .contextMenu {
-                        Button(note.isPinned ? "Unpin" : "Pin") {
-                            note.isPinned.toggle()
-                        }
-                        Divider()
-                        Button("Delete", role: .destructive) {
-                            deleteNote(note)
-                        }
-                    }
+        if selectedNote != nil {
+            HSplitView {
+                notesList
+                    .frame(minWidth: 200, idealWidth: 250)
+                if let note = selectedNote {
+                    NoteEditorView(note: note)
                 }
             }
-            .frame(minWidth: 200, idealWidth: 250)
+        } else {
+            notesList
+        }
+    }
 
-            // Editor
-            if let note = selectedNote {
-                NoteEditorView(note: note)
-            } else {
-                ContentUnavailableView(
-                    "Select a Note",
-                    systemImage: "note.text",
-                    description: Text("Select a note to edit, or click + to create one.")
-                )
+    @ViewBuilder
+    private var notesList: some View {
+        VStack(spacing: 0) {
+            // Filter bar
+            HStack {
+                Picker("Filter", selection: $filterType) {
+                    Text("All").tag(nil as NoteType?)
+                    ForEach(NoteType.allCases) { type in
+                        Label(type.label, systemImage: type.icon).tag(type as NoteType?)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 160)
+                .labelsHidden()
+
+                Spacer()
+
+                Button {
+                    addNote()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+            }
+            .padding(8)
+
+            Divider()
+
+            List(filteredNotes, selection: $selectedNote) { note in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        if note.isPinned {
+                            Image(systemName: "pin.fill")
+                                .font(.caption2)
+                                .foregroundStyle(ErdosColors.pinnedIcon)
+                        }
+                        Text(note.title)
+                            .font(.body)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                        Spacer()
+                        Image(systemName: note.noteType.icon)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(note.content.prefix(80))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Text(note.updatedAt, style: .relative)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 2)
+                .tag(note)
+                .contextMenu {
+                    Button(note.isPinned ? "Unpin" : "Pin") {
+                        note.isPinned.toggle()
+                    }
+                    Divider()
+                    Button("Delete", role: .destructive) {
+                        deleteNote(note)
+                    }
+                }
             }
         }
     }
@@ -100,7 +101,8 @@ struct NotesListView: View {
     }
 
     private func addNote() {
-        let note = Note(title: "New Note")
+        let noteType = filterType ?? .general
+        let note = Note(title: "New Note", noteType: noteType)
         note.experiment = experiment
         modelContext.insert(note)
 
