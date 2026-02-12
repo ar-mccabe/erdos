@@ -87,7 +87,7 @@ struct NotesListView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
-                    Text(note.updatedAt, style: .relative)
+                    Text(coarseRelativeTime(since: note.createdAt))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
@@ -121,7 +121,7 @@ struct NotesListView: View {
     private var filteredNotes: [Note] {
         let notes = experiment.notes.sorted {
             if $0.isPinned != $1.isPinned { return $0.isPinned }
-            return $0.updatedAt > $1.updatedAt
+            return $0.createdAt > $1.createdAt
         }
         if let filter = filterType {
             return notes.filter { $0.noteType == filter }
@@ -161,6 +161,17 @@ struct NotesListView: View {
     private func initialExport() {
         guard worktreePath != nil else { return }
         appState.noteSyncService.exportAllNotes(experiment: experiment)
+    }
+
+    private func coarseRelativeTime(since date: Date) -> String {
+        let seconds = Int(-date.timeIntervalSinceNow)
+        if seconds < 60 { return "just now" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes) min" }
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours) hr\(hours == 1 ? "" : "s"), \(minutes % 60) mins" }
+        let days = hours / 24
+        return "\(days) day\(days == 1 ? "" : "s"), \(hours % 24) hrs"
     }
 
     private func startPolling() {

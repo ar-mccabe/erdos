@@ -281,7 +281,7 @@ struct ArtifactsView: View {
     private var sortedNotes: [Note] {
         experiment.notes.sorted { a, b in
             if a.isPinned != b.isPinned { return a.isPinned }
-            return a.updatedAt > b.updatedAt
+            return a.createdAt > b.createdAt
         }
     }
 

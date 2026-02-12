@@ -6,7 +6,7 @@ struct NoteEditorView: View {
     var worktreePath: String?
     var onDelete: (() -> Void)?
     @Environment(AppState.self) private var appState
-    @State private var isPreview = false
+    @State private var isPreview = true
     @State private var exportTask: Task<Void, Never>?
     @State private var showDeleteConfirmation = false
 
@@ -26,6 +26,7 @@ struct NoteEditorView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                .labelsHidden()
                 .frame(width: 130)
 
                 Button {
@@ -42,11 +43,15 @@ struct NoteEditorView: View {
                 .font(.caption)
 
                 if onDelete != nil {
+                    Divider()
+                        .frame(height: 16)
+                        .padding(.horizontal, 4)
+
                     Button {
                         showDeleteConfirmation = true
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
                 }
@@ -58,7 +63,7 @@ struct NoteEditorView: View {
                 HStack(spacing: 8) {
                     let filename = NoteSyncService.filename(for: note)
                     CopyableLabel(
-                        text: ".erdos/notes/\(filename)",
+                        text: "@\(wt)/.erdos/notes/\(filename)",
                         icon: "doc.text",
                         display: ".erdos/notes/\(filename)",
                         font: .caption2,
@@ -68,7 +73,6 @@ struct NoteEditorView: View {
                     Spacer()
 
                     CopyNoteButton(text: "# \(note.title)\n\n\(note.content)", label: "Copy Note")
-                    CopyNoteButton(text: "@\(wt)/.erdos/notes/\(filename)", label: "Copy @-ref")
                 }
                 .padding(.horizontal, 8)
                 .padding(.bottom, 4)
