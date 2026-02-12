@@ -22,10 +22,15 @@ struct MarkdownContentView: View {
 struct MarkdownWebView: NSViewRepresentable {
     let markdown: String
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         let webView = WKWebView(frame: .zero, configuration: config)
         webView.setValue(false, forKey: "drawsBackground")
+        webView.navigationDelegate = context.coordinator
         loadHTML(into: webView)
         return webView
     }
@@ -37,6 +42,20 @@ struct MarkdownWebView: NSViewRepresentable {
     private func loadHTML(into webView: WKWebView) {
         let html = MarkdownWebViewHelper.buildHTML(markdown: markdown)
         webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    class Coordinator: NSObject, WKNavigationDelegate {
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
+            if navigationAction.navigationType == .linkActivated,
+               let url = navigationAction.request.url {
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+        }
     }
 }
 
@@ -74,6 +93,18 @@ struct SelfSizingMarkdownWebView: NSViewRepresentable {
 
         init(_ parent: SelfSizingMarkdownWebView) {
             self.parent = parent
+        }
+
+        func webView(_ webView: WKWebView,
+                     decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void) {
+            if navigationAction.navigationType == .linkActivated,
+               let url = navigationAction.request.url {
+                NSWorkspace.shared.open(url)
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
