@@ -58,82 +58,126 @@ struct NewExperimentSheet: View {
 
             Divider()
 
-            // Form
-            Form {
-                Section("Basics") {
-                    TextField("Title", text: $title, prompt: Text("e.g. Slack activity scoring model"))
-                        .multilineTextAlignment(.leading)
-                    TextField("Hypothesis", text: $hypothesis, prompt: Text("What are you exploring?"))
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(2...4)
-                    TextField("Detail", text: $detail, prompt: Text("Additional context (markdown)"), axis: .vertical)
-                        .multilineTextAlignment(.leading)
-                        .lineLimit(3...8)
-                    Picker("Initial Status", selection: $status) {
-                        ForEach([ExperimentStatus.idea, .researching, .planned, .implementing]) { s in
-                            Label(s.label, systemImage: s.icon).tag(s)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Title
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Title").font(.caption).foregroundStyle(.secondary)
+                        TextField("", text: $title, prompt: Text("e.g. Slack activity scoring model"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+
+                    // Hypothesis
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Hypothesis").font(.caption).foregroundStyle(.secondary)
+                        TextField("", text: $hypothesis, prompt: Text("What are you exploring?"))
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(2...4)
+                    }
+
+                    // Detail
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Detail").font(.caption).foregroundStyle(.secondary)
+                        TextField("", text: $detail, prompt: Text("Additional context (markdown)"), axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(3...8)
+                    }
+
+                    // Status & Tags row
+                    HStack(alignment: .top, spacing: 16) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Status").font(.caption).foregroundStyle(.secondary)
+                            Picker("", selection: $status) {
+                                ForEach([ExperimentStatus.idea, .researching, .planned, .implementing]) { s in
+                                    Label(s.label, systemImage: s.icon).tag(s)
+                                }
+                            }
+                            .labelsHidden()
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Tags").font(.caption).foregroundStyle(.secondary)
+                            TextField("", text: $tagsText, prompt: Text("ml, scoring, slack"))
+                                .textFieldStyle(.roundedBorder)
                         }
                     }
-                    TextField("Tags (comma-separated)", text: $tagsText, prompt: Text("ml, scoring, slack"))
-                        .multilineTextAlignment(.leading)
-                }
 
-                Section("Repository") {
-                    Picker("Repository", selection: $selectedRepo) {
-                        Text("None").tag(nil as RepoDiscoveryService.RepoInfo?)
-                        ForEach(appState.repoDiscovery.repos) { repo in
-                            Text(repo.name).tag(repo as RepoDiscoveryService.RepoInfo?)
+                    Divider()
+                        .padding(.vertical, 4)
+
+                    // Repository
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Repository").font(.caption).foregroundStyle(.secondary)
+                        Picker("", selection: $selectedRepo) {
+                            Text("None").tag(nil as RepoDiscoveryService.RepoInfo?)
+                            ForEach(appState.repoDiscovery.repos) { repo in
+                                Text(repo.name).tag(repo as RepoDiscoveryService.RepoInfo?)
+                            }
                         }
+                        .labelsHidden()
                     }
 
                     if selectedRepo != nil {
-                        Picker("Branch", selection: $branchMode) {
-                            ForEach(BranchMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Branch").font(.caption).foregroundStyle(.secondary)
+                            Picker("", selection: $branchMode) {
+                                ForEach(BranchMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
                         }
-                        .pickerStyle(.segmented)
 
                         switch branchMode {
                         case .createNew:
-                            Picker("Base Branch", selection: $baseBranch) {
-                                ForEach(branches) { branch in
-                                    Text(branch.name).tag(branch.name)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Base Branch").font(.caption).foregroundStyle(.secondary)
+                                Picker("", selection: $baseBranch) {
+                                    ForEach(branches) { branch in
+                                        Text(branch.name).tag(branch.name)
+                                    }
                                 }
+                                .labelsHidden()
+                                .disabled(isLoadingBranches)
                             }
-                            .disabled(isLoadingBranches)
 
-                            TextField("New Branch Name", text: $branchName, prompt: Text("auto-generated from title"))
-                                .multilineTextAlignment(.leading)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Branch Name").font(.caption).foregroundStyle(.secondary)
+                                TextField("", text: $branchName, prompt: Text("auto-generated from title"))
+                                    .textFieldStyle(.roundedBorder)
+                            }
 
                         case .useExisting:
                             if availableBranches.isEmpty {
                                 Text("No available branches")
                                     .foregroundStyle(.secondary)
+                                    .font(.caption)
                             } else {
-                                Picker("Branch", selection: $selectedExistingBranch) {
-                                    Text("Select a branch…").tag("")
-                                    ForEach(availableBranches) { branch in
-                                        Text(branch.name).tag(branch.name)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Branch").font(.caption).foregroundStyle(.secondary)
+                                    Picker("", selection: $selectedExistingBranch) {
+                                        Text("Select a branch…").tag("")
+                                        ForEach(availableBranches) { branch in
+                                            Text(branch.name).tag(branch.name)
+                                        }
                                     }
+                                    .labelsHidden()
+                                    .disabled(isLoadingBranches)
                                 }
-                                .disabled(isLoadingBranches)
                             }
                         }
 
                         Toggle("Create worktree immediately", isOn: $createWorktree)
                             .help("Creates an isolated working directory for this experiment")
+                            .padding(.top, 4)
                     }
-                }
 
-                if let error {
-                    Section {
+                    if let error {
                         Text(error)
                             .foregroundStyle(.red)
                             .font(.caption)
                     }
                 }
+                .padding(24)
             }
-            .formStyle(.grouped)
-            .frame(minHeight: 400)
 
             Divider()
 
@@ -149,7 +193,7 @@ struct NewExperimentSheet: View {
                     (selectedRepo != nil && branchMode == .useExisting && selectedExistingBranch.isEmpty)
                 )
             }
-            .padding()
+            .padding(16)
         }
         .frame(width: 550, height: 600)
         .onChange(of: selectedRepo) { _, newRepo in
