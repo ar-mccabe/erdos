@@ -63,11 +63,13 @@ If `claude` is installed via Homebrew or npm, it's likely at `/opt/homebrew/bin/
 2. **Create a worktree** — Erdos makes an isolated git branch + working directory
 3. **Use the terminal** — embedded terminal tabs with full PATH (Homebrew tools work)
 4. **Launch Claude** — opens a Claude Code session in the experiment's worktree
-5. **Track progress** — timeline, notes, artifacts, and git changes are all visible per-experiment
+5. **Track progress** — timeline, notes, artifacts, git changes, and GitHub PRs are all visible per-experiment
+6. **Note sync** — notes are synced to `.erdos/notes/` in the worktree, so Claude can read and write them
+7. **Cleanup** — when an experiment is completed or abandoned, Erdos can archive files and remove the worktree
 
-Experiments go through statuses automatically: Idea -> Researching -> Planned -> Active -> Paused (and back). You can also manually set Completed or Abandoned, which locks the status from auto-updates.
+Experiments have 11 statuses: Idea, Researching, Planned, Paused, Blocked, Implementing, Testing, In Review, Merged, Completed, Abandoned. Light auto-inference moves experiments from Idea to Researching (when a Claude session launches) and to Planned (when a plan is detected). All other transitions are manual. Completed, Abandoned, and Merged are terminal — auto-inference won't touch them.
 
-A blue notification dot appears in the sidebar when a Claude session is waiting for your input.
+A yellow notification dot appears in the sidebar when a Claude session is waiting for your input.
 
 ## Repo configuration (`.erdos.yml`)
 
@@ -114,10 +116,10 @@ Sources/Erdos/
   Models/          # SwiftData models (Experiment, Note, Artifact, etc.)
   Views/
     Sidebar/       # Experiment list, row views
-    Detail/        # Tabs: Plan, Notes, Artifacts, Timeline, Changes, Tasks
+    Detail/        # Tabs: Plan, Notes, Artifacts, Timeline, Changes, Pull Requests, Tasks
     Terminal/      # Terminal panel, MonitoredTerminalView
     Components/    # StatusBadge, CopyableLabel, ErdosColors
-  Services/        # GitService, ClaudeService, StatusInferenceService, WorktreeSetupService
+  Services/        # GitService, GitHubService, ClaudeService, NoteSyncService, CleanupService, WorktreeSetupService, StatusInferenceService, FileWatcherService
   Utilities/       # ProcessRunner, SlugGenerator, StreamJSONParser
 scripts/
   bundle.sh        # Assembles .app bundle for make install
