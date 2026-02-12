@@ -60,6 +60,7 @@ struct TimelineView: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .frame(width: 200)
             }
             .padding(8)

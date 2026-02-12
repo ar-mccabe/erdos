@@ -17,8 +17,15 @@ struct ChangesView: View {
                 noWorktreeState
             } else if files.isEmpty && error == nil {
                 cleanTreeState
+            } else if selectedFile != nil {
+                HSplitView {
+                    fileListPane
+                        .frame(minWidth: 180, idealWidth: 240)
+                    diffViewer
+                        .frame(minWidth: 300)
+                }
             } else {
-                changesContent
+                fileListPane
             }
         }
         .task { await refresh() }
@@ -26,25 +33,15 @@ struct ChangesView: View {
         .onDisappear { autoRefreshTimer?.invalidate() }
     }
 
-    // MARK: - Main Content
+    // MARK: - File List Pane
 
     @ViewBuilder
-    private var changesContent: some View {
+    private var fileListPane: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
-            if selectedFile != nil {
-                HSplitView {
-                    fileList
-                        .frame(minWidth: 180, idealWidth: 240)
-                    diffViewer
-                        .frame(minWidth: 300)
-                }
-            } else {
-                fileList
-            }
+            fileList
         }
-        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Toolbar
@@ -160,6 +157,7 @@ struct ChangesView: View {
                     Text("Staged Changes").tag(true)
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .frame(width: 280)
                 Spacer()
             }

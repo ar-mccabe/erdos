@@ -77,8 +77,15 @@ struct ArtifactsView: View {
                 noWorktreeState
             } else if documentPaths.isEmpty && experiment.notes.isEmpty && changedFiles.isEmpty && error == nil {
                 emptyState
+            } else if selectedItem != nil {
+                HSplitView {
+                    artifactListPane
+                        .frame(minWidth: 180, idealWidth: 240)
+                    contentPreview
+                        .frame(minWidth: 300)
+                }
             } else {
-                mainContent
+                artifactListPane
             }
         }
         .task { await refresh() }
@@ -86,25 +93,15 @@ struct ArtifactsView: View {
         .onDisappear { autoRefreshTimer?.invalidate() }
     }
 
-    // MARK: - Main Content
+    // MARK: - Artifact List Pane
 
     @ViewBuilder
-    private var mainContent: some View {
+    private var artifactListPane: some View {
         VStack(spacing: 0) {
             toolbar
             Divider()
-            if selectedItem != nil {
-                HSplitView {
-                    artifactList
-                        .frame(minWidth: 180, idealWidth: 240)
-                    contentPreview
-                        .frame(minWidth: 300)
-                }
-            } else {
-                artifactList
-            }
+            artifactList
         }
-        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Toolbar
