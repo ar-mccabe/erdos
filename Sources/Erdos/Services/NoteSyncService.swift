@@ -122,11 +122,17 @@ final class NoteSyncService {
             let frontmatter = Self.parseFrontmatter(from: content)
             let body = Self.extractBody(from: content)
 
+            let hasFileId = frontmatter?["id"] as? String != nil
             let fileId: UUID
             if let idString = frontmatter?["id"] as? String, let parsed = UUID(uuidString: idString) {
                 fileId = parsed
             } else {
-                // Malformed or missing id — treat as a new note
+                // No id — check if we already imported this file path before
+                // by scanning existing notes for a matching title to avoid duplicates
+                let fileTitle = (frontmatter?["title"] as? String) ?? Self.titleFromFilename(file)
+                if experiment.notes.contains(where: { $0.title == fileTitle }) {
+                    continue
+                }
                 fileId = UUID()
             }
 
@@ -148,8 +154,7 @@ final class NoteSyncService {
             } else {
                 // New note — Claude or someone created a file
                 let note = Note(title: fileTitle, content: body, noteType: fileType, isPinned: filePinned)
-                // Override the auto-generated id with the one from the file (if valid)
-                if frontmatter?["id"] as? String != nil {
+                if hasFileId {
                     note.id = fileId
                 }
                 if let created = Self.parseDate(frontmatter?["created"]) {
@@ -161,6 +166,14 @@ final class NoteSyncService {
                 note.experiment = experiment
                 context.insert(note)
                 events.append((summary: "Note created from file: \(fileTitle)", isNew: true))
+
+                // Write back frontmatter with id so subsequent polls can match this note
+                let updatedContent = Self.renderMarkdown(for: note)
+                isWriting = true
+                try? updatedContent.write(toFile: fullPath, atomically: true, encoding: .utf8)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                    self?.isWriting = false
+                }
             }
         }
 
