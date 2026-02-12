@@ -68,6 +68,12 @@ struct PlanView: View {
                     .font(.caption)
                 }
 
+                if !planContent.isEmpty && experiment.worktreePath == nil {
+                    Label("Archived", systemImage: "archivebox")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Spacer()
 
                 // Right: path, edit, refresh
@@ -330,7 +336,15 @@ struct PlanView: View {
 
     private func loadPlan() async {
         guard let worktree = experiment.worktreePath else {
-            planContent = ""
+            // No worktree — try to load archived plan from notes
+            if let archivedPlan = experiment.notes.first(where: {
+                $0.noteType == .archive && $0.title == "[Archive] PLAN.md"
+            }) {
+                planContent = archivedPlan.content
+                planFilePath = nil
+            } else {
+                planContent = ""
+            }
             return
         }
 
