@@ -19,7 +19,9 @@ struct NotesListView: View {
                     notesList
                         .frame(minWidth: 200, idealWidth: 250)
                     if let note = selectedNote {
-                        NoteEditorView(note: note, worktreePath: worktreePath)
+                        NoteEditorView(note: note, worktreePath: worktreePath) {
+                            deleteNote(note)
+                        }
                     }
                 }
             } else {

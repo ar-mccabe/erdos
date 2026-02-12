@@ -4,9 +4,11 @@ import AppKit
 struct NoteEditorView: View {
     @Bindable var note: Note
     var worktreePath: String?
+    var onDelete: (() -> Void)?
     @Environment(AppState.self) private var appState
     @State private var isPreview = false
     @State private var exportTask: Task<Void, Never>?
+    @State private var showDeleteConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -38,6 +40,16 @@ struct NoteEditorView: View {
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
+
+                if onDelete != nil {
+                    Button {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.borderless)
+                }
             }
             .padding(8)
 
@@ -85,6 +97,12 @@ struct NoteEditorView: View {
         }
         .onChange(of: note.isPinned) { _, _ in
             scheduleDebouncedExport()
+        }
+        .alert("Delete Note", isPresented: $showDeleteConfirmation) {
+            Button("Delete", role: .destructive) { onDelete?() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Delete \"\(note.title)\"? This cannot be undone.")
         }
     }
 
