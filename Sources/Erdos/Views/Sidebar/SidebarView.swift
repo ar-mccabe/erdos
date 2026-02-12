@@ -14,10 +14,19 @@ struct SidebarView: View {
                 ForEach(groupedStatuses, id: \.self) { status in
                     let exps = experimentsFor(status: status)
                     if !exps.isEmpty {
-                        Section(status.label.uppercased()) {
+                        Section {
                             ForEach(exps) { experiment in
                                 ExperimentRowView(experiment: experiment)
                                     .tag(experiment)
+                            }
+                        } header: {
+                            HStack(spacing: 6) {
+                                Circle()
+                                    .fill(status.color)
+                                    .frame(width: 9, height: 9)
+                                Text(status.label)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(status.color.opacity(0.7))
                             }
                         }
                     }
@@ -33,17 +42,15 @@ struct SidebarView: View {
             }
         }
         .searchable(text: $state.searchText, placement: .sidebar, prompt: "Search experiments...")
-        .safeAreaInset(edge: .bottom) {
-            Button {
-                appState.isCreatingExperiment = true
-            } label: {
-                Label("New Experiment", systemImage: "plus")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    appState.isCreatingExperiment = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .help("New Experiment (⌘N)")
             }
-            .buttonStyle(.borderless)
-            .padding(8)
         }
     }
 

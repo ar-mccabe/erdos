@@ -62,9 +62,12 @@ struct NewExperimentSheet: View {
             Form {
                 Section("Basics") {
                     TextField("Title", text: $title, prompt: Text("e.g. Slack activity scoring model"))
+                        .multilineTextAlignment(.leading)
                     TextField("Hypothesis", text: $hypothesis, prompt: Text("What are you exploring?"))
+                        .multilineTextAlignment(.leading)
                         .lineLimit(2...4)
                     TextField("Detail", text: $detail, prompt: Text("Additional context (markdown)"), axis: .vertical)
+                        .multilineTextAlignment(.leading)
                         .lineLimit(3...8)
                     Picker("Initial Status", selection: $status) {
                         ForEach([ExperimentStatus.idea, .researching, .planned, .implementing]) { s in
@@ -72,6 +75,7 @@ struct NewExperimentSheet: View {
                         }
                     }
                     TextField("Tags (comma-separated)", text: $tagsText, prompt: Text("ml, scoring, slack"))
+                        .multilineTextAlignment(.leading)
                 }
 
                 Section("Repository") {
@@ -98,6 +102,7 @@ struct NewExperimentSheet: View {
                             .disabled(isLoadingBranches)
 
                             TextField("New Branch Name", text: $branchName, prompt: Text("auto-generated from title"))
+                                .multilineTextAlignment(.leading)
 
                         case .useExisting:
                             if availableBranches.isEmpty {

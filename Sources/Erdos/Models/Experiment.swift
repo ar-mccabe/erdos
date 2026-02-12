@@ -51,17 +51,20 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .idea: .purple
-        case .researching: .blue
-        case .planned: .cyan
-        case .implementing: .green
-        case .testing: .teal
-        case .inReview: .indigo
-        case .blocked: .red
-        case .paused: .orange
-        case .merged: .mint
-        case .completed: .gray
-        case .abandoned: .secondary
+        // Cool → warm progression, bright enough for dark backgrounds
+        case .idea:           Color(red: 0.70, green: 0.55, blue: 0.90)  // lavender
+        case .researching:    Color(red: 0.55, green: 0.55, blue: 0.92)  // periwinkle
+        case .planned:        Color(red: 0.45, green: 0.65, blue: 0.92)  // sky blue
+        case .implementing:   Color(red: 0.30, green: 0.75, blue: 0.82)  // teal
+        case .testing:        Color(red: 0.30, green: 0.80, blue: 0.68)  // sea green
+        case .inReview:       Color(red: 0.35, green: 0.82, blue: 0.55)  // green
+        // Off-track
+        case .blocked:        Color(red: 0.85, green: 0.38, blue: 0.38)  // coral red
+        case .paused:         Color(red: 0.88, green: 0.75, blue: 0.35)  // warm gold
+        // Terminal
+        case .merged:         Color(red: 0.40, green: 0.78, blue: 0.52)  // muted green
+        case .completed:      Color(red: 0.24, green: 0.73, blue: 0.46)  // #3CBB75
+        case .abandoned:      Color(white: 0.45)                          // gray
         }
     }
 
