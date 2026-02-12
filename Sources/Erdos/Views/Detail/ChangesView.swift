@@ -33,13 +33,18 @@ struct ChangesView: View {
         VStack(spacing: 0) {
             toolbar
             Divider()
-            HSplitView {
+            if selectedFile != nil {
+                HSplitView {
+                    fileList
+                        .frame(minWidth: 180, idealWidth: 240)
+                    diffViewer
+                        .frame(minWidth: 300)
+                }
+            } else {
                 fileList
-                    .frame(minWidth: 180, idealWidth: 240)
-                diffViewer
-                    .frame(minWidth: 300)
             }
         }
+        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Toolbar

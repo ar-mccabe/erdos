@@ -269,14 +269,17 @@ final class GitService {
         }
 
         // Uncommitted changes: working tree + staged
-        let statusResult = try await runner.git("status", "--porcelain=v1", in: path)
+        let statusResult = try await runner.git("status", "--porcelain=v1", "-u", in: path)
         if statusResult.succeeded {
             uncommittedPaths = Set(
                 statusResult.stdout
                     .split(separator: "\n", omittingEmptySubsequences: true)
                     .compactMap { line -> String? in
                         guard line.count >= 4 else { return nil }
-                        return String(line.dropFirst(3))
+                        let filePath = String(line.dropFirst(3))
+                        // Skip directory entries (trailing /)
+                        if filePath.hasSuffix("/") { return nil }
+                        return filePath
                     }
             )
         }

@@ -93,13 +93,18 @@ struct ArtifactsView: View {
         VStack(spacing: 0) {
             toolbar
             Divider()
-            HSplitView {
+            if selectedItem != nil {
+                HSplitView {
+                    artifactList
+                        .frame(minWidth: 180, idealWidth: 240)
+                    contentPreview
+                        .frame(minWidth: 300)
+                }
+            } else {
                 artifactList
-                    .frame(minWidth: 180, idealWidth: 240)
-                contentPreview
-                    .frame(minWidth: 300)
             }
         }
+        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Toolbar
