@@ -150,23 +150,33 @@ struct ChangesView: View {
     @ViewBuilder
     private var diffViewer: some View {
         VStack(spacing: 0) {
-            // Staged/unstaged picker
-            HStack {
-                Picker("View", selection: $showStaged) {
-                    Text("Working Changes").tag(false)
-                    Text("Staged Changes").tag(true)
+            // Staged/unstaged picker (hide for untracked files where it's meaningless)
+            if selectedFile?.isUntracked != true {
+                HStack {
+                    Picker("View", selection: $showStaged) {
+                        Text("Working Changes").tag(false)
+                        Text("Staged Changes").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 280)
+                    Spacer()
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 280)
-                Spacer()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+
+                Divider()
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
 
-            Divider()
-
-            if diffText.isEmpty {
+            if !diffText.isEmpty {
+                ScrollView(.vertical) {
+                    Text(coloredDiff(diffText))
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .textSelection(.enabled)
+                }
+            } else {
                 ContentUnavailableView {
                     Label(showStaged ? "No Staged Changes" : "No Working Changes",
                           systemImage: "doc.text")
@@ -177,16 +187,10 @@ struct ChangesView: View {
                         Text("Select a file to view its diff.")
                     }
                 }
-            } else {
-                ScrollView(.vertical) {
-                    Text(coloredDiff(diffText))
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .textSelection(.enabled)
-                }
+                .frame(maxHeight: .infinity)
             }
         }
+        .frame(maxHeight: .infinity)
         .onChange(of: showStaged) { _, _ in
             Task { await loadDiff(for: selectedFile) }
         }
@@ -237,6 +241,21 @@ struct ChangesView: View {
 
     private func loadDiff(for file: GitService.FileStatus?) async {
         guard let path = experiment.worktreePath else { return }
+
+        // Untracked files have no git diff — show file content directly
+        if let file, file.isUntracked {
+            let fullPath = (path as NSString).appendingPathComponent(file.path)
+            do {
+                let content = try String(contentsOfFile: fullPath, encoding: .utf8)
+                let lines = content.components(separatedBy: "\n")
+                let numbered = lines.enumerated().map { "+\($0.element)" }.joined(separator: "\n")
+                diffText = "new file: \(file.path)\n\n\(numbered)"
+            } catch {
+                diffText = "Cannot read file (binary or encoding issue)"
+            }
+            return
+        }
+
         do {
             diffText = try await appState.gitService.getDiff(
                 path: path,
