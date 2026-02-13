@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import SwiftTerm
 
 @Observable
 @MainActor
@@ -19,6 +20,28 @@ final class AppState {
 
     // Notification dots — experiments with a Claude session waiting for input
     var experimentsWaitingForInput: Set<UUID> = []
+
+    // Terminal process cleanup — all live terminals registered for shutdown
+    private var terminalRefs: [ObjectIdentifier: MonitoredTerminalView] = [:]
+
+    func registerTerminal(_ terminal: MonitoredTerminalView) {
+        let id = ObjectIdentifier(terminal)
+        terminalRefs[id] = terminal
+    }
+
+    func unregisterTerminal(_ terminal: MonitoredTerminalView) {
+        let id = ObjectIdentifier(terminal)
+        terminalRefs.removeValue(forKey: id)
+    }
+
+    func terminateAllProcesses() {
+        for (_, terminal) in terminalRefs {
+            if terminal.isProcessRunning {
+                terminal.terminateProcessGroup()
+            }
+        }
+        terminalRefs.removeAll()
+    }
 
     // Status bar
     var activeSessionCount = 0

@@ -4,6 +4,7 @@ import SwiftTerm
 struct TerminalPanelView: View {
     let experiment: Experiment
     @Binding var hasWaitingClaudeSession: Bool
+    @Environment(AppState.self) private var appState
     @State private var tabs: [TerminalTab] = []
     @State private var selectedTabId: UUID?
     @State private var terminalViews: [UUID: MonitoredTerminalView] = [:]
@@ -92,7 +93,15 @@ struct TerminalPanelView: View {
                         delayedInput: tab.delayedInput,
                         terminalView: Binding(
                             get: { terminalViews[tab.id] },
-                            set: { terminalViews[tab.id] = $0 }
+                            set: { newValue in
+                                if let old = terminalViews[tab.id] {
+                                    appState.unregisterTerminal(old)
+                                }
+                                terminalViews[tab.id] = newValue
+                                if let tv = newValue {
+                                    appState.registerTerminal(tv)
+                                }
+                            }
                         )
                     )
                     .opacity(selectedTabId == tab.id ? 1 : 0)
@@ -145,6 +154,12 @@ struct TerminalPanelView: View {
     }
 
     private func closeTab(_ id: UUID) {
+        if let terminal = terminalViews[id] {
+            if terminal.isProcessRunning {
+                terminal.terminateProcessGroup()
+            }
+            appState.unregisterTerminal(terminal)
+        }
         tabs.removeAll { $0.id == id }
         terminalViews.removeValue(forKey: id)
         if selectedTabId == id {

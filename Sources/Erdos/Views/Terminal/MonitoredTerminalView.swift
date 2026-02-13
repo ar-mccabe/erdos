@@ -20,4 +20,16 @@ class MonitoredTerminalView: LocalProcessTerminalView {
             self.isProcessRunning = false
         }
     }
+
+    /// Kill the shell and all its child processes.
+    /// SIGHUP tells zsh to forward the signal to all its jobs (foreground & background),
+    /// which is how child processes like servers and Claude CLI get cleaned up.
+    /// Plain SIGTERM only kills the shell — it doesn't propagate to child process groups.
+    func terminateProcessGroup() {
+        let pid = process.shellPid
+        guard pid != 0 else { return }
+        kill(pid, SIGHUP)
+        // Clean up SwiftTerm's DispatchIO/fd state
+        terminate()
+    }
 }

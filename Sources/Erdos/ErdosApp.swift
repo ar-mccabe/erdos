@@ -16,6 +16,9 @@ struct ErdosApp: App {
                     NSApp.setActivationPolicy(.regular)
                     NSApp.activate()
                 }
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    appState.terminateAllProcesses()
+                }
         }
         .modelContainer(for: [
             Experiment.self,
