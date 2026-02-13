@@ -35,11 +35,8 @@ final class NoteSyncService {
     func exportAllNotes(experiment: Experiment) {
         guard let worktreePath = experiment.worktreePath else { return }
         let dirPath = ensureNotesDirectory(worktreePath: worktreePath)
-        let fm = FileManager.default
 
         isWriting = true
-
-        let noteIds = Set(experiment.notes.map { $0.id })
 
         // Write all current notes
         for note in experiment.notes {
@@ -48,23 +45,6 @@ final class NoteSyncService {
             removeOldFile(for: note, in: dirPath, currentFilename: filename)
             let content = Self.renderMarkdown(for: note)
             try? content.write(toFile: filePath, atomically: true, encoding: .utf8)
-        }
-
-        // Delete orphan files (files whose id doesn't match any note)
-        if let files = try? fm.contentsOfDirectory(atPath: dirPath) {
-            for file in files where file.hasSuffix(".md") {
-                let fullPath = (dirPath as NSString).appendingPathComponent(file)
-                if let content = try? String(contentsOfFile: fullPath, encoding: .utf8),
-                   let frontmatter = Self.parseFrontmatter(from: content),
-                   let idString = frontmatter["id"] as? String,
-                   let fileId = UUID(uuidString: idString) {
-                    if !noteIds.contains(fileId) {
-                        try? fm.removeItem(atPath: fullPath)
-                    }
-                } else {
-                    // Can't parse id — leave the file alone
-                }
-            }
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
