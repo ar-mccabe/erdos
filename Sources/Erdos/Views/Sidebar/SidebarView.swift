@@ -26,9 +26,9 @@ struct SidebarView: View {
                             }
                         } header: {
                             HStack(spacing: 6) {
-                                Circle()
-                                    .fill(status.color)
-                                    .frame(width: 9, height: 9)
+                                Image(systemName: status.icon)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(status.color)
                                 Text(status.label)
                                     .fontWeight(.semibold)
                                     .foregroundStyle(status.color.opacity(0.7))
