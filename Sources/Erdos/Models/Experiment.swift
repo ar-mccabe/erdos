@@ -51,37 +51,62 @@ enum ExperimentStatus: String, Codable, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        // Cool → warm progression, bright enough for dark backgrounds
-        case .idea:           Color(red: 0.70, green: 0.55, blue: 0.90)  // lavender
-        case .researching:    Color(red: 0.55, green: 0.55, blue: 0.92)  // periwinkle
-        case .planned:        Color(red: 0.45, green: 0.65, blue: 0.92)  // sky blue
-        case .implementing:   Color(red: 0.30, green: 0.75, blue: 0.82)  // teal
-        case .testing:        Color(red: 0.30, green: 0.80, blue: 0.68)  // sea green
-        case .inReview:       Color(red: 0.35, green: 0.82, blue: 0.55)  // green
+        // White → purple gradient (GitHub merge purple #8250DF)
+        case .idea:           Color(red: 0.90, green: 0.88, blue: 0.93)  // near white
+        case .researching:    Color(red: 0.84, green: 0.79, blue: 0.93)  // faint lavender
+        case .planned:        Color(red: 0.78, green: 0.70, blue: 0.92)  // light purple
+        case .implementing:   Color(red: 0.72, green: 0.61, blue: 0.92)  // medium lavender
+        case .testing:        Color(red: 0.66, green: 0.52, blue: 0.91)  // medium purple
+        case .inReview:       Color(red: 0.60, green: 0.43, blue: 0.91)  // deep lavender
         // Off-track
         case .blocked:        Color(red: 0.85, green: 0.38, blue: 0.38)  // coral red
-        case .paused:         Color(red: 0.88, green: 0.75, blue: 0.35)  // warm gold
+        case .paused:         Color(red: 0.92, green: 0.85, blue: 0.55)  // pale yellow
         // Terminal
-        case .merged:         Color(red: 0.40, green: 0.78, blue: 0.52)  // muted green
-        case .completed:      Color(red: 0.24, green: 0.73, blue: 0.46)  // #3CBB75
-        case .abandoned:      Color(white: 0.45)                          // gray
+        case .merged:         Color(red: 0.51, green: 0.31, blue: 0.87)  // GitHub purple
+        case .completed:      Color(white: 0.55)                          // gray
+        case .abandoned:      Color(red: 0.90, green: 0.60, blue: 0.60)  // light red
         }
     }
 
-    /// Sidebar grouping order
+    /// Sidebar grouping order: active flow → off-track → terminal
     var sortOrder: Int {
         switch self {
+        // Active flow
         case .idea: 0
         case .researching: 1
         case .planned: 2
-        case .paused: 3
-        case .blocked: 4
-        case .implementing: 5
-        case .testing: 6
-        case .inReview: 7
-        case .merged: 8
+        case .implementing: 3
+        case .testing: 4
+        case .inReview: 5
+        case .merged: 6
+        // Off-track
+        case .paused: 7
+        case .blocked: 8
+        // Terminal
         case .completed: 9
         case .abandoned: 10
+        }
+    }
+
+    /// Which sidebar section this status belongs to
+    var sidebarGroup: SidebarGroup {
+        switch self {
+        case .idea, .researching, .planned, .implementing, .testing, .inReview, .merged:
+            return .active
+        case .paused, .blocked:
+            return .offTrack
+        case .completed, .abandoned:
+            return .terminal
+        }
+    }
+
+    enum SidebarGroup: Int, Comparable {
+        case active = 0
+        case offTrack = 1
+        case terminal = 2
+
+        static func < (lhs: SidebarGroup, rhs: SidebarGroup) -> Bool {
+            lhs.rawValue < rhs.rawValue
         }
     }
 }

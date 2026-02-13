@@ -21,16 +21,22 @@ struct RepoBadge: View {
         return Int(hash % UInt64(repoColors.count))
     }
 
-    // Warm neutrals only — no blues, teals, greens, or purples
-    // that could overlap with the status gradient.
+    // Greens & blues weighted heavily, browns as fallback.
+    // 5 greens + 4 blues + 2 browns = 82% chance of green/blue.
     static let repoColors: [Color] = [
-        Color(red: 0.80, green: 0.52, blue: 0.35),  // terracotta
+        // Greens
+        Color(red: 0.40, green: 0.72, blue: 0.45),  // fern
+        Color(red: 0.55, green: 0.78, blue: 0.52),  // sage
+        Color(red: 0.35, green: 0.62, blue: 0.40),  // forest
+        Color(red: 0.48, green: 0.68, blue: 0.48),  // moss
+        Color(red: 0.42, green: 0.75, blue: 0.58),  // jade
+        // Blues
+        Color(red: 0.40, green: 0.60, blue: 0.82),  // steel blue
+        Color(red: 0.50, green: 0.70, blue: 0.88),  // sky
+        Color(red: 0.35, green: 0.50, blue: 0.72),  // slate
+        Color(red: 0.45, green: 0.62, blue: 0.78),  // denim
+        // Browns
         Color(red: 0.72, green: 0.55, blue: 0.35),  // copper
-        Color(red: 0.75, green: 0.62, blue: 0.44),  // sand
-        Color(red: 0.65, green: 0.42, blue: 0.35),  // clay
-        Color(red: 0.78, green: 0.48, blue: 0.40),  // rust
-        Color(red: 0.68, green: 0.58, blue: 0.48),  // driftwood
-        Color(red: 0.72, green: 0.48, blue: 0.50),  // rosewood
-        Color(red: 0.62, green: 0.52, blue: 0.40),  // sienna
+        Color(red: 0.65, green: 0.48, blue: 0.32),  // walnut
     ]
 }

@@ -11,9 +11,14 @@ struct SidebarView: View {
 
         List(selection: $state.selectedExperiment) {
             if !filteredExperiments.isEmpty {
-                ForEach(groupedStatuses, id: \.self) { status in
+                ForEach(Array(groupedStatuses.enumerated()), id: \.element) { index, status in
                     let exps = experimentsFor(status: status)
                     if !exps.isEmpty {
+                        if index > 0,
+                           status.sidebarGroup != groupedStatuses[index - 1].sidebarGroup {
+                            Divider()
+                                .padding(.top, 8)
+                        }
                         Section {
                             ForEach(exps) { experiment in
                                 ExperimentRowView(experiment: experiment)

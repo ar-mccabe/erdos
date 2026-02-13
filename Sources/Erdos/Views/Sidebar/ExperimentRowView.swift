@@ -28,6 +28,7 @@ struct ExperimentRowView: View {
                     .lineLimit(1)
             }
         }
+        .opacity(experiment.status == .completed || experiment.status == .abandoned ? 0.5 : 1.0)
         .padding(.vertical, 2)
     }
 }
