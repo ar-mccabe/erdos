@@ -18,6 +18,7 @@ struct ExperimentDetailView: View {
     @State private var showCleanupConfirmation = false
     @State private var isCleaningUp = false
     @State private var cleanupError: String?
+    @State private var claudeUsage: ClaudeUsage?
 
     enum DetailTab: String, CaseIterable, Identifiable {
         case plan = "Plan"
@@ -189,6 +190,18 @@ struct ExperimentDetailView: View {
                 if let envVar = experiment.envVar {
                     CopyableLabel(text: "ENV=\(envVar)", icon: "terminal", display: "ENV=\(envVar)")
                 }
+                if let usage = claudeUsage, usage.inputTokens > 0 {
+                    CopyableLabel(
+                        text: "Input: \(usage.inputTokens.formatted()) / Output: \(usage.outputTokens.formatted())",
+                        icon: "number.square",
+                        display: "\(TokenFormatter.compact(usage.inputTokens)) / \(TokenFormatter.compact(usage.outputTokens))"
+                    )
+                    CopyableLabel(
+                        text: String(format: "$%.2f", usage.costUSD),
+                        icon: "dollarsign.circle",
+                        display: String(format: "$%.2f", usage.costUSD)
+                    )
+                }
                 if let status = repoStatus {
                     if status.dirtyFiles > 0 {
                         Label("\(status.dirtyFiles) changed", systemImage: "pencil.circle")
@@ -314,6 +327,7 @@ struct ExperimentDetailView: View {
         guard let path = experiment.worktreePath ?? (experiment.repoPath.isEmpty ? nil : experiment.repoPath) else { return }
         repoStatus = try? await appState.gitService.getStatus(path: path)
         headCommit = try? await appState.gitService.getHeadCommit(path: path)
+        claudeUsage = await ClaudeUsageService.loadUsage(forPath: path)
     }
 
     private func createWorktree() async {
