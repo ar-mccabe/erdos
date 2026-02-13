@@ -26,7 +26,9 @@ enum ArtifactItem: Identifiable, Hashable {
 
     var icon: String {
         switch self {
-        case .document: return "doc.text"
+        case .document(let path, _):
+            if path.lowercased().hasSuffix(".csv") { return "tablecells" }
+            return "doc.text"
         case .note(let note): return note.noteType.icon
         case .changedFile(let file):
             let ext = URL(fileURLWithPath: file.path).pathExtension.lowercased()
@@ -34,6 +36,7 @@ enum ArtifactItem: Identifiable, Hashable {
             case "swift": return "swift"
             case "py": return "chevron.left.forwardslash.chevron.right"
             case "md": return "doc.richtext"
+            case "csv": return "tablecells"
             case "json", "yaml", "yml", "toml": return "gearshape"
             default: return "doc"
             }
@@ -233,6 +236,8 @@ struct ArtifactsView: View {
             }
         } else if isMarkdown(selectedItem) {
             MarkdownContentView(content: previewContent)
+        } else if isCSV(selectedItem) {
+            CSVContentView(content: previewContent)
         } else {
             ScrollView(.vertical) {
                 Text(previewContent)
@@ -253,6 +258,18 @@ struct ArtifactsView: View {
             return true
         case .changedFile(let file):
             return file.path.lowercased().hasSuffix(".md")
+        }
+    }
+
+    private func isCSV(_ item: ArtifactItem?) -> Bool {
+        guard let item else { return false }
+        switch item {
+        case .document(let path, _):
+            return path.lowercased().hasSuffix(".csv")
+        case .note:
+            return false
+        case .changedFile(let file):
+            return file.path.lowercased().hasSuffix(".csv")
         }
     }
 
@@ -309,13 +326,26 @@ struct ArtifactsView: View {
     private func discoverDocuments(in worktree: String) -> [(path: String, name: String)] {
         let knownFiles = ["PLAN.md", "CLAUDE.md", "README.md", ".claude/settings.local.json"]
         let fm = FileManager.default
-        return knownFiles.compactMap { file in
+
+        var results = knownFiles.compactMap { file -> (path: String, name: String)? in
             let fullPath = (worktree as NSString).appendingPathComponent(file)
             if fm.fileExists(atPath: fullPath) {
                 return (path: file, name: URL(fileURLWithPath: file).lastPathComponent)
             }
             return nil
         }
+
+        // Auto-discover CSV files in the worktree root
+        if let contents = try? fm.contentsOfDirectory(atPath: worktree) {
+            let csvFiles = contents
+                .filter { $0.lowercased().hasSuffix(".csv") }
+                .sorted()
+            for file in csvFiles {
+                results.append((path: file, name: file))
+            }
+        }
+
+        return results
     }
 
     private func loadContent(for item: ArtifactItem?) async {
@@ -357,7 +387,7 @@ struct ArtifactsView: View {
         // Check file size
         if let attrs = try? fm.attributesOfItem(atPath: fullPath),
            let size = attrs[.size] as? UInt64,
-           size > 500_000 {
+           size > 10_000_000 {
             previewContent = ""
             previewError = "File too large to preview (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)))."
             return
