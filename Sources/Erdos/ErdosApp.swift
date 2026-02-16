@@ -26,6 +26,7 @@ struct ErdosApp: App {
             Artifact.self,
             ClaudeSession.self,
             TimelineEvent.self,
+            TaskUpdate.self,
         ])
         .defaultSize(width: 1200, height: 800)
         .commands {

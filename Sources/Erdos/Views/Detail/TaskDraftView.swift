@@ -9,8 +9,9 @@ struct TaskDraftView: View {
 
     enum TaskAction { case draftTask, draftUpdate }
 
-    @State private var draftTitle = ""
-    @State private var draftBody = ""
+    // Transient streaming state (only used during generation)
+    @State private var streamingTitle = ""
+    @State private var streamingBody = ""
     @State private var rawOutput = ""
     @State private var isRunning = false
     @State private var statusMessage = ""
@@ -20,170 +21,228 @@ struct TaskDraftView: View {
     @State private var startTime: Date?
     @State private var elapsedSeconds = 0
     @State private var timer: Timer?
-    @State private var draftFilePath: String?
+    @State private var didMigrate = false
 
-    private var hasPriorDraft: Bool { draftFilePath != nil }
+    private var hasOriginalTask: Bool { experiment.originalTask != nil }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Toolbar
-            HStack(spacing: 8) {
+            toolbar
+            Divider()
+
+            if experiment.taskUpdateHistory.isEmpty && !isRunning {
+                emptyState
+            } else {
+                feedView
+            }
+        }
+        .task { migrateExistingDraft() }
+    }
+
+    // MARK: - Toolbar
+
+    private var toolbar: some View {
+        HStack(spacing: 8) {
+            Button {
+                currentAction = .draftTask
+                Task { await runDraft() }
+            } label: {
+                Label(hasOriginalTask ? "Redraft Task" : "Draft Task", systemImage: "doc.text.fill")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isRunning)
+
+            if hasOriginalTask {
                 Button {
-                    currentAction = .draftTask
+                    currentAction = .draftUpdate
                     Task { await runDraft() }
                 } label: {
-                    Label("Draft Task", systemImage: "doc.text.fill")
+                    Label("Draft Update", systemImage: "arrow.uturn.up")
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.borderless)
+                .font(.caption)
                 .disabled(isRunning)
+            }
 
-                if hasPriorDraft {
-                    Button {
-                        currentAction = .draftUpdate
-                        Task { await runDraft() }
-                    } label: {
-                        Label("Draft Update", systemImage: "arrow.uturn.up")
+            if isRunning {
+                HStack(spacing: 4) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("\(elapsedSeconds)s")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                    if !statusMessage.isEmpty {
+                        Text(statusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .italic()
+                    }
+                    Button("Stop") {
+                        claudeService.cancel()
+                        isRunning = false
+                        statusMessage = ""
+                        cleanupTimer()
                     }
                     .buttonStyle(.borderless)
                     .font(.caption)
-                    .disabled(isRunning)
-                }
-
-                if isRunning {
-                    HStack(spacing: 4) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("\(elapsedSeconds)s")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                        Button("Stop") {
-                            claudeService.cancel()
-                            isRunning = false
-                            statusMessage = ""
-                            cleanupTimer()
-                        }
-                        .buttonStyle(.borderless)
-                        .font(.caption)
-                    }
-                }
-
-                Spacer()
-
-                if let path = draftFilePath {
-                    CopyableLabel(
-                        text: path,
-                        display: path.replacingOccurrences(of: NSHomeDirectory(), with: "~"),
-                        font: .caption2,
-                        color: .quaternary
-                    )
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
 
-            Divider()
-
-            // Content
-            if rawOutput.isEmpty && !isRunning && !hasPriorDraft {
-                emptyState
-            } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            if !draftTitle.isEmpty {
-                                titleCard
-                            }
-
-                            if !draftBody.isEmpty {
-                                bodyCard
-                            }
-
-                            if isRunning && draftTitle.isEmpty && draftBody.isEmpty {
-                                Text(rawOutput)
-                                    .font(.system(.body, design: .monospaced))
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-
-                            if isRunning {
-                                HStack(spacing: 8) {
-                                    ProgressView()
-                                        .controlSize(.small)
-                                    Text(statusMessage.isEmpty ? "Starting Claude..." : statusMessage)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .italic()
-                                }
-                                .padding(.top, 8)
-                            }
-
-                            if let error {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .foregroundStyle(.red)
-                                    Text(error)
-                                        .foregroundStyle(.red)
-                                }
-                                .font(.caption)
-                                .padding(8)
-                                .background(.red.opacity(0.1))
-                                .clipShape(RoundedRectangle(cornerRadius: 6))
-                            }
-
-                            Color.clear.frame(height: 1).id("bottom")
-                        }
-                        .padding()
-                    }
-                    .onChange(of: rawOutput) { _, _ in
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                }
-            }
+            Spacer()
         }
-        .task { loadExistingDraft() }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
     }
 
-    // MARK: - Cards
+    // MARK: - Feed
 
-    private var titleCard: some View {
+    private var feedView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    ForEach(experiment.taskUpdateHistory) { update in
+                        taskUpdateCard(update)
+                    }
+
+                    // Streaming card during generation
+                    if isRunning {
+                        streamingCard
+                    }
+
+                    if let error {
+                        errorBanner(error)
+                    }
+
+                    Color.clear.frame(height: 1).id("bottom")
+                }
+                .padding()
+            }
+            .onChange(of: rawOutput) { _, _ in
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+            .onChange(of: experiment.taskUpdates.count) { _, _ in
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+        }
+    }
+
+    // MARK: - Task Update Card
+
+    private func taskUpdateCard(_ update: TaskUpdate) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Title")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+                // Type badge
+                Text(update.updateType == .original ? "Original Task" : "Update")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(update.updateType == .original ? Color.indigo.opacity(0.15) : Color.teal.opacity(0.15))
+                    .foregroundStyle(update.updateType == .original ? .indigo : .teal)
+                    .clipShape(Capsule())
+
+                Text(update.createdAt, style: .relative)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+
+                if update.costUSD > 0 {
+                    Text("$\(String(format: "%.4f", update.costUSD))")
+                        .font(.caption2)
+                        .foregroundStyle(.quaternary)
+                }
+
                 Spacer()
-                CopyButton(text: draftTitle, label: "Copy Title")
+
+                CopyButton(text: update.title, label: "Title")
+                CopyButton(text: update.body, label: "Body")
+                CopyButton(text: "# \(update.title)\n\n\(update.body)", label: "All")
             }
-            Text(draftTitle)
+
+            Text(update.title)
                 .font(.title3.weight(.semibold))
                 .textSelection(.enabled)
+
+            MarkdownContentView(content: update.body)
+                .frame(minHeight: 100)
         }
         .padding(12)
         .background(.quaternary.opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
-    private var bodyCard: some View {
+    // MARK: - Streaming Card
+
+    private var streamingCard: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Body")
+                Text(currentAction == .draftTask ? "Original Task" : "Update")
+                    .font(.caption2.weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.orange.opacity(0.15))
+                    .foregroundStyle(.orange)
+                    .clipShape(Capsule())
+
+                Text("Generating...")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .italic()
+
+                Spacer()
+            }
+
+            if !streamingTitle.isEmpty {
+                Text(streamingTitle)
+                    .font(.title3.weight(.semibold))
+                    .textSelection(.enabled)
+            }
+
+            if !streamingBody.isEmpty {
+                MarkdownContentView(content: streamingBody)
+                    .frame(minHeight: 100)
+            }
+
+            if streamingTitle.isEmpty && streamingBody.isEmpty && !rawOutput.isEmpty {
+                Text(rawOutput)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(statusMessage.isEmpty ? "Starting Claude..." : statusMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
-                Spacer()
-                CopyButton(text: draftBody, label: "Copy Body")
-                CopyButton(text: "# \(draftTitle)\n\n\(draftBody)", label: "Copy All")
+                    .italic()
             }
-            MarkdownContentView(content: draftBody)
-                .frame(minHeight: 200)
+            .padding(.top, 4)
         }
         .padding(12)
-        .background(.quaternary.opacity(0.3))
+        .background(.orange.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(.orange.opacity(0.2), lineWidth: 1)
+        )
     }
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            Text(message)
+                .foregroundStyle(.red)
+        }
+        .font(.caption)
+        .padding(8)
+        .background(.red.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    // MARK: - Empty State
 
     @ViewBuilder
     private var emptyState: some View {
@@ -219,8 +278,8 @@ struct TaskDraftView: View {
         isRunning = true
         error = nil
         rawOutput = ""
-        draftTitle = ""
-        draftBody = ""
+        streamingTitle = ""
+        streamingBody = ""
         statusMessage = "Gathering context..."
         startTime = Date()
         elapsedSeconds = 0
@@ -235,49 +294,83 @@ struct TaskDraftView: View {
         let workingDir = experiment.worktreePath ?? experiment.repoPath
 
         do {
-            let prompt: String
+            var totalCost: Double = 0
+
             switch currentAction {
             case .draftTask:
-                prompt = await buildDraftTaskPrompt()
+                let prompt = await buildDraftTaskPrompt()
+                statusMessage = "Waiting for Claude..."
+                totalCost = try await streamGeneration(prompt: prompt, workingDir: workingDir)
+
             case .draftUpdate:
-                prompt = await buildDraftUpdatePrompt()
-            }
+                // Step 1: Extract context with Haiku
+                statusMessage = "Step 1: Analyzing changes..."
+                let extractionPrompt = await buildExtractionPrompt()
+                var extractedSummary = ""
+                var step1Cost: Double = 0
 
-            statusMessage = "Waiting for Claude..."
-
-            for try await chunk in claudeService.streamResearch(
-                prompt: prompt,
-                workingDirectory: workingDir.isEmpty ? nil : workingDir,
-                model: "sonnet",
-                permissionMode: .readOnly,
-                maxBudget: 0.5,
-                maxTurns: 2
-            ) {
-                switch chunk {
-                case .text(let text):
-                    rawOutput += text
-                    statusMessage = "Claude is writing..."
-                    parseDraftOutput()
-                case .sessionId:
-                    break
-                case .result(let cost, _, _):
-                    statusMessage = "Completed — $\(String(format: "%.4f", cost))"
-                case .error(let msg):
-                    error = msg
-                    statusMessage = "Error occurred"
+                for try await chunk in claudeService.streamResearch(
+                    prompt: extractionPrompt,
+                    workingDirectory: workingDir.isEmpty ? nil : workingDir,
+                    model: "haiku",
+                    permissionMode: .readOnly,
+                    maxBudget: 1.5,
+                    maxTurns: 20
+                ) {
+                    guard isRunning else { break }
+                    switch chunk {
+                    case .text(let text):
+                        extractedSummary += text
+                    case .result(let cost, _, _):
+                        step1Cost = cost
+                    case .sessionId:
+                        break
+                    case .error(let msg):
+                        error = msg
+                    }
                 }
+
+                guard isRunning else {
+                    cleanupTimer()
+                    return
+                }
+
+                // Step 2: Write update with Sonnet
+                statusMessage = "Step 2: Writing update..."
+                let updatePrompt = await buildDraftUpdatePrompt(extractedSummary: extractedSummary)
+                let step2Cost = try await streamGeneration(prompt: updatePrompt, workingDir: workingDir)
+                totalCost = step1Cost + step2Cost
             }
 
             // Final parse
-            parseDraftOutput()
+            parseStreamingOutput()
 
-            // Save to file
-            saveDraft()
+            // Persist as TaskUpdate entity
+            let updateType: TaskUpdateType = currentAction == .draftTask ? .original : .update
+            let title = streamingTitle.isEmpty ? experiment.title : streamingTitle
+            let body = streamingBody.isEmpty ? rawOutput : streamingBody
+
+            // If redrafting original, remove the old one
+            if currentAction == .draftTask, let existing = experiment.originalTask {
+                modelContext.delete(existing)
+            }
+
+            let taskUpdate = TaskUpdate(
+                title: title,
+                body: body,
+                updateType: updateType,
+                costUSD: totalCost
+            )
+            taskUpdate.experiment = experiment
+            modelContext.insert(taskUpdate)
+
+            // Still write TASK-DRAFT.md for backward compat
+            saveDraftFile()
 
             // Record timeline event
             let eventType: EventType = currentAction == .draftTask ? .taskDrafted : .taskUpdateDrafted
             let summary = currentAction == .draftTask
-                ? "Task drafted: \(draftTitle.prefix(80))"
+                ? "Task drafted: \(title.prefix(80))"
                 : "Task update drafted"
             let event = TimelineEvent(eventType: eventType, summary: summary)
             event.experiment = experiment
@@ -293,7 +386,39 @@ struct TaskDraftView: View {
         cleanupTimer()
     }
 
-    // MARK: - Prompt Building
+    /// Streams a generation from Claude Sonnet, updating the streaming UI. Returns cost.
+    private func streamGeneration(prompt: String, workingDir: String) async throws -> Double {
+        var cost: Double = 0
+
+        for try await chunk in claudeService.streamResearch(
+            prompt: prompt,
+            workingDirectory: workingDir.isEmpty ? nil : workingDir,
+            model: "sonnet",
+            permissionMode: .readOnly,
+            maxBudget: 5.0,
+            maxTurns: 20
+        ) {
+            guard isRunning else { break }
+            switch chunk {
+            case .text(let text):
+                rawOutput += text
+                statusMessage = "Claude is writing..."
+                parseStreamingOutput()
+            case .sessionId:
+                break
+            case .result(let c, _, _):
+                cost = c
+                statusMessage = "Completed — $\(String(format: "%.4f", c))"
+            case .error(let msg):
+                error = msg
+                statusMessage = "Error occurred"
+            }
+        }
+
+        return cost
+    }
+
+    // MARK: - Prompt Building (Phase 2: Enhanced Context)
 
     private func buildDraftTaskPrompt() async -> String {
         var parts: [String] = []
@@ -301,12 +426,21 @@ struct TaskDraftView: View {
         parts.append("""
         You are writing a task description for a team project tracker (Convictional). Write in direct, casual, first-person tone. Not corporate speak.
 
+        ## Available Tools
+        You have: Read, Glob, Grep, and Bash limited to: git log, git diff, git show, git merge-base, git branch, git status, wc, ls, find.
+        That's it — no other commands are available. If a tool call is denied, move on and complete the task with what you have.
+
+        Below you'll find a `git diff --stat` showing which files changed and how many lines. If you need to see the actual patch for specific files, use `git diff main...HEAD -- <path>`. Don't try to read the entire diff at once — pick the most important files.
+
+        ## Task Format
         Structure varies by type:
         - Implementation tasks: problem context → hypothesis/approach → scope/footprint
         - Research tasks: background → hypothesis → approach → what success looks like
 
         Use markdown: headers, bullet points, inline links where relevant. Use <br /> for spacing between sections.
         Match length to complexity — simple tasks get 1-3 sentences, research tasks get detailed multi-section writeups.
+
+        Cite specific files and changes when describing scope — use the diff stat and read patches for key files.
 
         Output format — you MUST use exactly these two headers:
         ## Title
@@ -405,14 +539,19 @@ struct TaskDraftView: View {
         }
 
         // Plan content
-        if let worktree = experiment.worktreePath {
-            let planPath = (worktree as NSString).appendingPathComponent("PLAN.md")
-            if let planContent = try? String(contentsOfFile: planPath, encoding: .utf8), !planContent.isEmpty {
-                parts.append("")
-                parts.append("## Implementation Plan (PLAN.md)")
-                let truncated = planContent.count > 3000 ? String(planContent.prefix(3000)) + "\n\n[...truncated]" : planContent
-                parts.append(truncated)
-            }
+        let planContent = gatherPlanContent()
+        if !planContent.isEmpty {
+            parts.append("")
+            parts.append("## Implementation Plan (PLAN.md)")
+            parts.append(planContent)
+        }
+
+        // Git diff (actual code patches)
+        let diffStat = await gatherGitDiffStat()
+        if !diffStat.isEmpty {
+            parts.append("")
+            parts.append("## Changed Files (git diff --stat)")
+            parts.append(diffStat)
         }
 
         // Git log
@@ -421,6 +560,22 @@ struct TaskDraftView: View {
             parts.append("")
             parts.append("## Git History (branch commits)")
             parts.append(gitLog)
+        }
+
+        // PR context
+        let prContext = await gatherPRContext()
+        if !prContext.isEmpty {
+            parts.append("")
+            parts.append("## Pull Request")
+            parts.append(prContext)
+        }
+
+        // Artifact/notes context
+        let artifactContext = gatherArtifactContents()
+        if !artifactContext.isEmpty {
+            parts.append("")
+            parts.append("## Notes & Artifacts")
+            parts.append(artifactContext)
         }
 
         // Recent timeline
@@ -432,18 +587,75 @@ struct TaskDraftView: View {
         }
 
         parts.append("")
-        parts.append("Now write the task. Use ## Title and ## Body headers. Match the tone and style of the examples above.")
+        parts.append("Now write the task. Use ## Title and ## Body headers. Match the tone and style of the examples above. Reference specific files and changes — use `git diff main...HEAD -- <path>` to read patches for the most important files.")
 
         return parts.joined(separator: "\n")
     }
 
-    private func buildDraftUpdatePrompt() async -> String {
+    /// Build the extraction prompt for Step 1 (Haiku) of the two-step pipeline.
+    private func buildExtractionPrompt() async -> String {
+        var parts: [String] = []
+
+        parts.append("""
+        Analyze the following context from a software project and produce a structured summary. Be concise and technical.
+
+        You have: Read, Glob, Grep, and Bash limited to: git log, git diff, git show, git merge-base, git branch, git status, wc, ls, find.
+        That's it — no other commands. If a tool call is denied, move on.
+
+        Below is a `git diff --stat` showing changed files. Use `git diff main...HEAD -- <path>` to read patches for the most important files (pick 3-5 key files, don't try to read everything at once).
+
+        Output these sections:
+        1. **Files Changed**: List each file with a 1-line description of the change
+        2. **Key Technical Changes**: 3-5 bullet points on the most important changes
+        3. **PR Feedback**: Summarize any review feedback or comments (or "No PR feedback available")
+        4. **Apparent Status**: One sentence on the current state of the work
+        """)
+
+        // Git diff
+        let diffStat = await gatherGitDiffStat()
+        if !diffStat.isEmpty {
+            parts.append("")
+            parts.append("## Changed Files (git diff --stat)")
+            parts.append(diffStat)
+        }
+
+        // Git log (since last draft)
+        let lastDraftDate = lastTaskDraftDate()
+        let gitLog = await gatherGitLog(since: lastDraftDate)
+        if !gitLog.isEmpty {
+            parts.append("")
+            parts.append("## Recent Commits")
+            parts.append(gitLog)
+        }
+
+        // PR context
+        let prContext = await gatherPRContext()
+        if !prContext.isEmpty {
+            parts.append("")
+            parts.append("## Pull Request")
+            parts.append(prContext)
+        }
+
+        return parts.joined(separator: "\n")
+    }
+
+    /// Build the update-writing prompt for Step 2 (Sonnet) of the two-step pipeline.
+    private func buildDraftUpdatePrompt(extractedSummary: String) async -> String {
         var parts: [String] = []
 
         parts.append("""
         You are writing a progress update comment for a task on a team project tracker (Convictional). Write in direct, casual, first-person tone. Not corporate speak.
 
-        This is an update comment, not a new task description. Summarize what's happened since the task was created — what was done, what changed, what's next. Keep it concise but informative.
+        ## Available Tools
+        You have: Read, Glob, Grep, and Bash limited to: git log, git diff, git show, git merge-base, git branch, git status, wc, ls, find.
+        That's it — no other commands are available. If a tool call is denied, move on and complete the task with what you have.
+
+        You have a pre-analyzed summary of changes below. If you need more detail on specific files, use `git diff main...HEAD -- <path>` to read patches selectively.
+
+        ## Update Format
+        This is an update comment, not a new task description. Focus on what's NEW since the last update — don't repeat what's already been said. Summarize what was done, what changed, what's next. Keep it concise but informative.
+
+        You have the full task history below — build on the narrative. Reference specific files and changes. If there's PR feedback, address it.
 
         Use markdown: bullet points, inline code, links where relevant.
 
@@ -478,45 +690,170 @@ struct TaskDraftView: View {
         parts.append("")
         parts.append("## Experiment: \(experiment.title)")
 
-        // Current task draft content
-        if let worktree = experiment.worktreePath {
-            let draftPath = (worktree as NSString).appendingPathComponent("TASK-DRAFT.md")
-            if let content = try? String(contentsOfFile: draftPath, encoding: .utf8), !content.isEmpty {
+        // Prior update history
+        let history = experiment.taskUpdateHistory
+        if !history.isEmpty {
+            parts.append("")
+            parts.append("## Task History")
+            for update in history {
+                let typeLabel = update.updateType == .original ? "ORIGINAL TASK" : "UPDATE"
+                let dateStr = update.createdAt.formatted(date: .abbreviated, time: .shortened)
                 parts.append("")
-                parts.append("## Original Task Description")
-                parts.append(content)
+                parts.append("### [\(typeLabel)] \(dateStr) — \(update.title)")
+                let truncatedBody = update.body.count > 2000 ? String(update.body.prefix(2000)) + "\n\n[...truncated]" : update.body
+                parts.append(truncatedBody)
             }
         }
 
-        // Find last taskDrafted event for "since" queries
-        let lastDraftDate = experiment.timeline
-            .filter { $0.eventType == .taskDrafted || $0.eventType == .taskUpdateDrafted }
-            .sorted { $0.createdAt < $1.createdAt }
-            .last?.createdAt
-
-        // Git log since last draft
-        let gitLog = await gatherGitLog(since: lastDraftDate)
-        if !gitLog.isEmpty {
+        // Extracted summary from Step 1
+        if !extractedSummary.isEmpty {
             parts.append("")
-            parts.append("## Git Commits Since Last Draft")
-            parts.append(gitLog)
+            parts.append("## Analysis of Recent Changes")
+            parts.append(extractedSummary)
+        }
+
+        // Plan content
+        let planContent = gatherPlanContent()
+        if !planContent.isEmpty {
+            parts.append("")
+            parts.append("## Implementation Plan (PLAN.md)")
+            parts.append(planContent)
+        }
+
+        // Notes context
+        let artifactContext = gatherArtifactContents()
+        if !artifactContext.isEmpty {
+            parts.append("")
+            parts.append("## Notes & Artifacts")
+            parts.append(artifactContext)
         }
 
         // Timeline since last draft
+        let lastDraftDate = lastTaskDraftDate()
         let timelineText = gatherTimeline(since: lastDraftDate, limit: 20)
         if !timelineText.isEmpty {
             parts.append("")
-            parts.append("## Timeline Events Since Last Draft")
+            parts.append("## Timeline Events Since Last Update")
             parts.append(timelineText)
         }
 
         parts.append("")
-        parts.append("Now write the update. Use ## Title and ## Body headers. Match the tone of the example above.")
+        parts.append("Now write the update. Use ## Title and ## Body headers. Focus on NEW progress since the last update in the task history. Don't repeat what's already been covered. Reference specific files and code changes from the analysis above.")
 
         return parts.joined(separator: "\n")
     }
 
     // MARK: - Context Gathering
+
+    /// Get the combined branch diff stat (file list + line counts). Lightweight overview
+    /// that fits in any prompt — Claude can use `git diff` tools for full patches if needed.
+    private func gatherGitDiffStat() async -> String {
+        guard let worktree = experiment.worktreePath,
+              let baseBranch = experiment.baseBranch else { return "" }
+
+        guard let result = try? await ProcessRunner.shared.run(
+            "/usr/bin/git",
+            arguments: ["diff", "\(baseBranch)...HEAD", "--stat=120", "--no-color"],
+            currentDirectory: worktree
+        ), result.succeeded, !result.stdout.isEmpty else { return "" }
+
+        return result.stdout
+    }
+
+    /// Get PR context: title, state, stats, reviews, comments.
+    private func gatherPRContext() async -> String {
+        guard let worktree = experiment.worktreePath,
+              let branch = experiment.branchName else { return "" }
+
+        // Find PR for this branch
+        guard let prs = try? await appState.gitHubService.listPRs(repoPath: worktree, branch: branch),
+              let pr = prs.first else { return "" }
+
+        // Get detail
+        guard let detail = try? await appState.gitHubService.getPRDetail(repoPath: worktree, prNumber: pr.number) else {
+            // Fall back to list-level info
+            return "**\(pr.title)** (#\(pr.number)) — \(pr.state.label)"
+        }
+
+        var lines: [String] = []
+        lines.append("**\(detail.title)** (#\(detail.number)) — \(detail.state.label)")
+        lines.append("+\(detail.additions) -\(detail.deletions) across \(detail.changedFiles) files")
+
+        if !detail.reviewDecision.isEmpty {
+            lines.append("Review: \(detail.reviewDecision)")
+        }
+
+        // PR body (truncated)
+        if !detail.body.isEmpty {
+            let truncBody = detail.body.count > 1000 ? String(detail.body.prefix(1000)) + "..." : detail.body
+            lines.append("")
+            lines.append("PR Description:")
+            lines.append(truncBody)
+        }
+
+        // Top 5 comments
+        let topComments = detail.comments.prefix(5)
+        if !topComments.isEmpty {
+            lines.append("")
+            lines.append("Comments:")
+            for comment in topComments {
+                let truncComment = comment.body.count > 300 ? String(comment.body.prefix(300)) + "..." : comment.body
+                lines.append("- @\(comment.author): \(truncComment)")
+            }
+        }
+
+        // Top 3 reviews with inline comments
+        let topReviews = detail.reviews.prefix(3)
+        if !topReviews.isEmpty {
+            lines.append("")
+            lines.append("Reviews:")
+            for review in topReviews {
+                lines.append("- @\(review.author) [\(review.state.label)]")
+                if !review.body.isEmpty {
+                    let truncReview = review.body.count > 300 ? String(review.body.prefix(300)) + "..." : review.body
+                    lines.append("  \(truncReview)")
+                }
+                for inlineComment in review.comments.prefix(3) {
+                    lines.append("  - `\(inlineComment.path):\(inlineComment.line ?? 0)`: \(inlineComment.body.prefix(200))")
+                }
+            }
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    /// Get PLAN.md content (truncated to 3KB).
+    private func gatherPlanContent() -> String {
+        guard let worktree = experiment.worktreePath else { return "" }
+        let planPath = (worktree as NSString).appendingPathComponent("PLAN.md")
+        guard let planContent = try? String(contentsOfFile: planPath, encoding: .utf8),
+              !planContent.isEmpty else { return "" }
+
+        if planContent.count > 3000 {
+            return String(planContent.prefix(3000)) + "\n\n[...truncated]"
+        }
+        return planContent
+    }
+
+    /// Get experiment notes (exclude archive, top 5 by updatedAt, truncated).
+    private func gatherArtifactContents() -> String {
+        let notes = experiment.notes
+            .filter { $0.noteType != .archive }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(5)
+
+        guard !notes.isEmpty else { return "" }
+
+        var lines: [String] = []
+        for note in notes {
+            let truncContent = note.content.count > 500 ? String(note.content.prefix(500)) + "..." : note.content
+            lines.append("**\(note.title)** (\(note.noteType.label)):")
+            lines.append(truncContent)
+            lines.append("")
+        }
+
+        return lines.joined(separator: "\n")
+    }
 
     private func gatherGitLog(since: Date?) async -> String {
         guard let worktree = experiment.worktreePath,
@@ -558,66 +895,101 @@ struct TaskDraftView: View {
         }.joined(separator: "\n")
     }
 
+    private func lastTaskDraftDate() -> Date? {
+        // Use the latest TaskUpdate createdAt, falling back to timeline events
+        if let lastUpdate = experiment.taskUpdateHistory.last {
+            return lastUpdate.createdAt
+        }
+        return experiment.timeline
+            .filter { $0.eventType == .taskDrafted || $0.eventType == .taskUpdateDrafted }
+            .sorted { $0.createdAt < $1.createdAt }
+            .last?.createdAt
+    }
+
     // MARK: - Output Parsing
 
-    private func parseDraftOutput() {
+    private func parseStreamingOutput() {
         let text = rawOutput
 
         // Find ## Title
         if let titleRange = text.range(of: "## Title") {
             let afterTitle = text[titleRange.upperBound...]
-            // Find the next ## header or end of string
             let titleEnd = afterTitle.range(of: "\n## ")?.lowerBound ?? afterTitle.endIndex
             let titleContent = afterTitle[..<titleEnd]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !titleContent.isEmpty {
-                draftTitle = titleContent
+                streamingTitle = titleContent
             }
         }
 
         // Find ## Body
         if let bodyRange = text.range(of: "## Body") {
             let afterBody = text[bodyRange.upperBound...]
-            // Body goes to end of output (it's the last section)
             let bodyContent = afterBody.trimmingCharacters(in: .whitespacesAndNewlines)
             if !bodyContent.isEmpty {
-                draftBody = bodyContent
+                streamingBody = bodyContent
             }
         }
     }
 
     // MARK: - Persistence
 
-    private func loadExistingDraft() {
-        guard let worktree = experiment.worktreePath else { return }
+    /// One-time migration: import existing TASK-DRAFT.md as an .original TaskUpdate.
+    private func migrateExistingDraft() {
+        guard !didMigrate else { return }
+        didMigrate = true
+
+        guard experiment.taskUpdates.isEmpty,
+              let worktree = experiment.worktreePath else { return }
+
         let path = (worktree as NSString).appendingPathComponent("TASK-DRAFT.md")
         guard FileManager.default.fileExists(atPath: path),
               let content = try? String(contentsOfFile: path, encoding: .utf8),
               !content.isEmpty else { return }
 
-        draftFilePath = path
-        rawOutput = content
-        parseDraftOutput()
+        // Parse title and body from the file
+        var title = experiment.title
+        var body = content
 
-        // If parsing failed, show raw content as body
-        if draftTitle.isEmpty && draftBody.isEmpty {
-            draftBody = content
+        if let titleRange = content.range(of: "## Title") {
+            let afterTitle = content[titleRange.upperBound...]
+            let titleEnd = afterTitle.range(of: "\n## ")?.lowerBound ?? afterTitle.endIndex
+            let titleContent = afterTitle[..<titleEnd]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !titleContent.isEmpty {
+                title = titleContent
+            }
         }
+
+        if let bodyRange = content.range(of: "## Body") {
+            let afterBody = content[bodyRange.upperBound...]
+            let bodyContent = afterBody.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !bodyContent.isEmpty {
+                body = bodyContent
+            }
+        }
+
+        let taskUpdate = TaskUpdate(title: title, body: body, updateType: .original)
+        taskUpdate.experiment = experiment
+        modelContext.insert(taskUpdate)
     }
 
-    private func saveDraft() {
+    /// Write the latest update to TASK-DRAFT.md for backward compat with CleanupService.
+    private func saveDraftFile() {
         guard let worktree = experiment.worktreePath else { return }
         let path = (worktree as NSString).appendingPathComponent("TASK-DRAFT.md")
 
+        let title = streamingTitle.isEmpty ? experiment.title : streamingTitle
+        let body = streamingBody.isEmpty ? rawOutput : streamingBody
+
         let content: String
-        if !draftTitle.isEmpty && !draftBody.isEmpty {
-            content = "## Title\n\n\(draftTitle)\n\n## Body\n\n\(draftBody)\n"
+        if !title.isEmpty && !body.isEmpty {
+            content = "## Title\n\n\(title)\n\n## Body\n\n\(body)\n"
         } else {
             content = rawOutput
         }
 
         try? content.write(toFile: path, atomically: true, encoding: .utf8)
-        draftFilePath = path
     }
 
     private func cleanupTimer() {
