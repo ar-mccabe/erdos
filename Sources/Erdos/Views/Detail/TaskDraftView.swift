@@ -164,7 +164,7 @@ struct TaskDraftView: View {
                 .textSelection(.enabled)
 
             MarkdownContentView(content: update.body)
-                .frame(minHeight: 100)
+                .frame(minHeight: update.updateType == .original ? 360 : 300)
         }
         .padding(12)
         .background(.quaternary.opacity(0.3))
@@ -200,7 +200,7 @@ struct TaskDraftView: View {
 
             if !streamingBody.isEmpty {
                 MarkdownContentView(content: streamingBody)
-                    .frame(minHeight: 100)
+                    .frame(minHeight: currentAction == .draftTask ? 360 : 300)
             }
 
             if streamingTitle.isEmpty && streamingBody.isEmpty && !rawOutput.isEmpty {
