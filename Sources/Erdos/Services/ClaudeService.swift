@@ -26,13 +26,17 @@ enum ResearchPermissionMode: String, CaseIterable, Identifiable {
     var cliArgs: [String] {
         switch self {
         case .readAndWeb:
+            // dontAsk auto-denies unlisted tools instead of prompting (which
+            // hangs in non-interactive -p mode). allowed-tools pre-approves the list.
             return [
-                "--permission-mode", "plan",
-                "--allowed-tools", "Read,Glob,Grep,WebSearch,WebFetch,Task",
+                "--permission-mode", "dontAsk",
+                "--allowed-tools", Self.readTools + ",WebSearch,WebFetch,Task",
             ]
         case .readOnly:
+            // dontAsk + explicit read tools — no permission prompts, no hangs.
             return [
-                "--permission-mode", "plan",
+                "--permission-mode", "dontAsk",
+                "--allowed-tools", Self.readTools,
             ]
         case .fullAccess:
             return [
@@ -40,6 +44,14 @@ enum ResearchPermissionMode: String, CaseIterable, Identifiable {
             ]
         }
     }
+
+    /// Tools safe for read-only exploration: file reading, git inspection, directory listing.
+    private static let readTools = [
+        "Read", "Glob", "Grep",
+        "Bash(git log *)", "Bash(git diff *)", "Bash(git show *)",
+        "Bash(git merge-base *)", "Bash(git branch *)", "Bash(git status *)",
+        "Bash(wc *)", "Bash(ls *)", "Bash(find *)",
+    ].joined(separator: ",")
 }
 
 @Observable
@@ -89,6 +101,10 @@ final class ClaudeService {
 
                 // Inherit environment so claude finds its config
                 process.environment = ProcessInfo.processInfo.environment
+
+                // Close stdin so Claude CLI can never block waiting for input
+                // (GUI apps don't have a terminal — inherited stdin hangs on read)
+                process.standardInput = FileHandle.nullDevice
 
                 let pipe = Pipe()
                 let errorPipe = Pipe()

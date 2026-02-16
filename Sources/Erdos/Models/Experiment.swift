@@ -140,6 +140,17 @@ final class Experiment {
     @Relationship(deleteRule: .cascade, inverse: \TimelineEvent.experiment)
     var timeline: [TimelineEvent] = []
 
+    @Relationship(deleteRule: .cascade, inverse: \TaskUpdate.experiment)
+    var taskUpdates: [TaskUpdate] = []
+
+    var originalTask: TaskUpdate? {
+        taskUpdates.first { $0.updateType == .original }
+    }
+
+    var taskUpdateHistory: [TaskUpdate] {
+        taskUpdates.sorted { $0.createdAt < $1.createdAt }
+    }
+
     var status: ExperimentStatus {
         get {
             if statusRaw == "active" { return .implementing }
