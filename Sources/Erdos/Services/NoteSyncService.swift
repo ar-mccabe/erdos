@@ -8,6 +8,14 @@ final class NoteSyncService {
 
     /// Guard to prevent the file watcher from re-importing our own writes.
     private(set) var isWriting = false
+    /// Guard to suppress onChange re-exports during import.
+    private(set) var isSyncing = false
+    /// Tracks when Erdos last wrote each note file, for freshness checks.
+    private var lastExportedAt: [UUID: Date] = [:]
+    /// Content last imported from disk, so onChange can detect import-triggered mutations.
+    private(set) var lastImportedContent: [UUID: String] = [:]
+    /// Title last imported from disk, so onChange can detect import-triggered mutations.
+    private(set) var lastImportedTitle: [UUID: String] = [:]
 
     private static let notesDir = ".erdos/notes"
 
@@ -18,6 +26,13 @@ final class NoteSyncService {
         let filename = Self.filename(for: note)
         let filePath = (dirPath as NSString).appendingPathComponent(filename)
 
+        // Freshness guard: skip if file has been externally modified since our last export
+        if let lastExport = lastExportedAt[note.id],
+           let fileMtime = Self.fileModificationDate(filePath),
+           fileMtime > lastExport {
+            return
+        }
+
         // If the title changed, the slug changed — find and remove the old file by scanning for this note's id
         removeOldFile(for: note, in: dirPath, currentFilename: filename)
 
@@ -25,6 +40,7 @@ final class NoteSyncService {
 
         isWriting = true
         try? content.write(toFile: filePath, atomically: true, encoding: .utf8)
+        lastExportedAt[note.id] = Date()
 
         // Brief delay before clearing the guard so the file watcher event can be ignored
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
@@ -42,9 +58,56 @@ final class NoteSyncService {
         for note in experiment.notes {
             let filename = Self.filename(for: note)
             let filePath = (dirPath as NSString).appendingPathComponent(filename)
+
+            // Freshness guard: skip if file has been externally modified since our last export
+            if let lastExport = lastExportedAt[note.id],
+               let fileMtime = Self.fileModificationDate(filePath),
+               fileMtime > lastExport {
+                continue
+            }
+
             removeOldFile(for: note, in: dirPath, currentFilename: filename)
             let content = Self.renderMarkdown(for: note)
             try? content.write(toFile: filePath, atomically: true, encoding: .utf8)
+            lastExportedAt[note.id] = Date()
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            self?.isWriting = false
+        }
+    }
+
+    /// Export only notes that don't already have a file on disk.
+    func exportMissingNotes(experiment: Experiment) {
+        guard let worktreePath = experiment.worktreePath else { return }
+        let dirPath = ensureNotesDirectory(worktreePath: worktreePath)
+        let fm = FileManager.default
+
+        // Collect IDs of notes already on disk
+        var diskNoteIds = Set<UUID>()
+        if let files = try? fm.contentsOfDirectory(atPath: dirPath) {
+            for file in files where file.hasSuffix(".md") {
+                let fullPath = (dirPath as NSString).appendingPathComponent(file)
+                if let content = try? String(contentsOfFile: fullPath, encoding: .utf8),
+                   let frontmatter = Self.parseFrontmatter(from: content),
+                   let idString = frontmatter["id"] as? String,
+                   let id = UUID(uuidString: idString) {
+                    diskNoteIds.insert(id)
+                }
+            }
+        }
+
+        // Export only notes not already on disk
+        let notesToExport = experiment.notes.filter { !diskNoteIds.contains($0.id) }
+        guard !notesToExport.isEmpty else { return }
+
+        isWriting = true
+        for note in notesToExport {
+            let filename = Self.filename(for: note)
+            let filePath = (dirPath as NSString).appendingPathComponent(filename)
+            let content = Self.renderMarkdown(for: note)
+            try? content.write(toFile: filePath, atomically: true, encoding: .utf8)
+            lastExportedAt[note.id] = Date()
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
@@ -72,6 +135,8 @@ final class NoteSyncService {
             }
         }
 
+        lastExportedAt.removeValue(forKey: note.id)
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
             self?.isWriting = false
         }
@@ -91,6 +156,8 @@ final class NoteSyncService {
         var events: [(summary: String, isNew: Bool)] = []
 
         guard let files = try? fm.contentsOfDirectory(atPath: dirPath) else { return events }
+
+        isSyncing = true
 
         // Build lookup of existing notes by id
         let existingNotes = Dictionary(uniqueKeysWithValues: experiment.notes.map { ($0.id, $0) })
@@ -124,11 +191,16 @@ final class NoteSyncService {
             if let existing = existingNotes[fileId] {
                 // Update only if file is newer
                 if let fileDate = fileUpdated, fileDate > existing.updatedAt {
+                    // Track imported content to suppress onChange re-export
+                    lastImportedContent[fileId] = body
+                    lastImportedTitle[fileId] = fileTitle
                     existing.title = fileTitle
                     existing.content = body
                     existing.noteType = fileType
                     existing.isPinned = filePinned
                     existing.updatedAt = fileDate
+                    // Record file mtime so subsequent user edits can export without being blocked
+                    lastExportedAt[fileId] = Self.fileModificationDate(fullPath) ?? Date()
                     events.append((summary: "Note updated from file: \(fileTitle)", isNew: false))
                 }
             } else {
@@ -151,13 +223,26 @@ final class NoteSyncService {
                 let updatedContent = Self.renderMarkdown(for: note)
                 isWriting = true
                 try? updatedContent.write(toFile: fullPath, atomically: true, encoding: .utf8)
+                lastExportedAt[note.id] = Date()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
                     self?.isWriting = false
                 }
             }
         }
 
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.isSyncing = false
+        }
+
         return events
+    }
+
+    // MARK: - Import Tracking
+
+    /// Clear tracked import content for a note after onChange has consumed it.
+    func clearImportedContent(noteId: UUID) {
+        lastImportedContent.removeValue(forKey: noteId)
+        lastImportedTitle.removeValue(forKey: noteId)
     }
 
     // MARK: - Directory Management

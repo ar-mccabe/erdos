@@ -29,7 +29,7 @@ struct NotesListView: View {
             }
         }
         .task {
-            initialExport()
+            initialSync()
             startPolling()
         }
         .onDisappear {
@@ -158,9 +158,22 @@ struct NotesListView: View {
         modelContext.delete(note)
     }
 
-    private func initialExport() {
-        guard worktreePath != nil else { return }
-        appState.noteSyncService.exportAllNotes(experiment: experiment)
+    private func initialSync() {
+        guard let wt = worktreePath else { return }
+        let events = appState.noteSyncService.importChanges(
+            worktreePath: wt,
+            experiment: experiment,
+            context: modelContext
+        )
+        for event in events {
+            let timelineEvent = TimelineEvent(
+                eventType: .noteUpdatedFromFile,
+                summary: event.summary
+            )
+            timelineEvent.experiment = experiment
+            modelContext.insert(timelineEvent)
+        }
+        appState.noteSyncService.exportMissingNotes(experiment: experiment)
     }
 
     private func coarseRelativeTime(since date: Date) -> String {

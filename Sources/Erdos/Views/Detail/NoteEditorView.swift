@@ -88,18 +88,30 @@ struct NoteEditorView: View {
                     .padding(4)
             }
         }
-        .onChange(of: note.content) { _, _ in
+        .onChange(of: note.content) { _, newContent in
+            if appState.noteSyncService.isSyncing { return }
+            if appState.noteSyncService.lastImportedContent[note.id] == newContent {
+                appState.noteSyncService.clearImportedContent(noteId: note.id)
+                return
+            }
             note.updatedAt = Date()
             scheduleDebouncedExport()
         }
-        .onChange(of: note.title) { _, _ in
+        .onChange(of: note.title) { _, newTitle in
+            if appState.noteSyncService.isSyncing { return }
+            if appState.noteSyncService.lastImportedTitle[note.id] == newTitle {
+                appState.noteSyncService.clearImportedContent(noteId: note.id)
+                return
+            }
             note.updatedAt = Date()
             scheduleDebouncedExport()
         }
         .onChange(of: note.noteType) { _, _ in
+            if appState.noteSyncService.isSyncing { return }
             scheduleDebouncedExport()
         }
         .onChange(of: note.isPinned) { _, _ in
+            if appState.noteSyncService.isSyncing { return }
             scheduleDebouncedExport()
         }
         .alert("Delete Note", isPresented: $showDeleteConfirmation) {
