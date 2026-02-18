@@ -189,8 +189,20 @@ final class NoteSyncService {
             let fileUpdated = Self.parseDate(frontmatter?["updated"]) ?? Self.fileModificationDate(fullPath)
 
             if let existing = existingNotes[fileId] {
-                // Update only if file is newer
-                if let fileDate = fileUpdated, fileDate > existing.updatedAt {
+                // Detect whether the file was externally modified
+                let shouldImport: Bool
+                if let lastExport = lastExportedAt[fileId],
+                   let fileMtime = Self.fileModificationDate(fullPath) {
+                    // We have export tracking — use mtime (reliable even if frontmatter date unchanged)
+                    shouldImport = fileMtime > lastExport
+                } else if let fileDate = fileUpdated {
+                    // No export record (cold start) — fall back to frontmatter date
+                    shouldImport = fileDate > existing.updatedAt
+                } else {
+                    shouldImport = false
+                }
+
+                if shouldImport {
                     // Track imported content to suppress onChange re-export
                     lastImportedContent[fileId] = body
                     lastImportedTitle[fileId] = fileTitle
@@ -198,7 +210,7 @@ final class NoteSyncService {
                     existing.content = body
                     existing.noteType = fileType
                     existing.isPinned = filePinned
-                    existing.updatedAt = fileDate
+                    existing.updatedAt = fileUpdated ?? Date()
                     // Record file mtime so subsequent user edits can export without being blocked
                     lastExportedAt[fileId] = Self.fileModificationDate(fullPath) ?? Date()
                     events.append((summary: "Note updated from file: \(fileTitle)", isNew: false))
