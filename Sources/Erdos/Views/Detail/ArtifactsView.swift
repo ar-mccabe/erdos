@@ -80,15 +80,13 @@ struct ArtifactsView: View {
                 noWorktreeState
             } else if documentPaths.isEmpty && experiment.notes.isEmpty && changedFiles.isEmpty && error == nil {
                 emptyState
-            } else if selectedItem != nil {
+            } else {
                 HSplitView {
                     artifactListPane
                         .frame(minWidth: 180, idealWidth: 240)
                     contentPreview
                         .frame(minWidth: 300)
                 }
-            } else {
-                artifactListPane
             }
         }
         .task { await refresh() }
@@ -105,6 +103,7 @@ struct ArtifactsView: View {
             Divider()
             artifactList
         }
+        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Toolbar
@@ -158,7 +157,10 @@ struct ArtifactsView: View {
                         let item = ArtifactItem.document(path: doc.path, name: doc.name)
                         artifactRow(item)
                             .tag(item)
-                            .contextMenu { openInFinderButton(relativePath: doc.path) }
+                            .contextMenu {
+                                openInFinderButton(relativePath: doc.path)
+                                copyPathButton(relativePath: doc.path)
+                            }
                     }
                 }
             }
@@ -175,16 +177,45 @@ struct ArtifactsView: View {
 
             if !changedFiles.isEmpty {
                 Section("Changed Files") {
-                    ForEach(changedFiles) { file in
-                        let item = ArtifactItem.changedFile(file)
-                        artifactRow(item)
-                            .tag(item)
-                            .contextMenu { openInFinderButton(relativePath: file.path) }
+                    ForEach(changedFilesByDirectory, id: \.directory) { group in
+                        if group.directory == "." {
+                            ForEach(group.files) { file in
+                                let item = ArtifactItem.changedFile(file)
+                                artifactRow(item)
+                                    .tag(item)
+                                    .contextMenu {
+                                        openInFinderButton(relativePath: file.path)
+                                        copyPathButton(relativePath: file.path)
+                                    }
+                            }
+                        } else {
+                            DisclosureGroup {
+                                ForEach(group.files) { file in
+                                    let item = ArtifactItem.changedFile(file)
+                                    artifactRow(item)
+                                        .tag(item)
+                                        .contextMenu {
+                                            openInFinderButton(relativePath: file.path)
+                                            copyPathButton(relativePath: file.path)
+                                        }
+                                }
+                            } label: {
+                                Label {
+                                    Text(group.directory)
+                                        .font(.system(.caption, design: .monospaced))
+                                } icon: {
+                                    Image(systemName: "folder")
+                                }
+                                .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                 }
             }
         }
         .listStyle(.sidebar)
+        .scrollContentBackground(.hidden)
+        .background(Color(nsColor: .controlBackgroundColor))
         .onChange(of: selectedItem) { _, newValue in
             Task { await loadContent(for: newValue) }
         }
@@ -214,6 +245,17 @@ struct ArtifactsView: View {
             if let worktree = experiment.worktreePath {
                 let fullPath = (worktree as NSString).appendingPathComponent(relativePath)
                 NSWorkspace.shared.selectFile(fullPath, inFileViewerRootedAtPath: "")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func copyPathButton(relativePath: String) -> some View {
+        Button("Copy Path") {
+            if let worktree = experiment.worktreePath {
+                let fullPath = (worktree as NSString).appendingPathComponent(relativePath)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(fullPath, forType: .string)
             }
         }
     }
@@ -300,6 +342,14 @@ struct ArtifactsView: View {
             if a.isPinned != b.isPinned { return a.isPinned }
             return a.createdAt > b.createdAt
         }
+    }
+
+    private var changedFilesByDirectory: [(directory: String, files: [GitService.ChangedFile])] {
+        let grouped = Dictionary(grouping: changedFiles) { file in
+            (file.path as NSString).deletingLastPathComponent
+        }
+        return grouped.sorted { $0.key < $1.key }
+            .map { (directory: $0.key.isEmpty ? "." : $0.key, files: $0.value.sorted { $0.path < $1.path }) }
     }
 
     private func refresh() async {
