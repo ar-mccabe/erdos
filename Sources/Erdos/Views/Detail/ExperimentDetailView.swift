@@ -19,6 +19,7 @@ struct ExperimentDetailView: View {
     @State private var isCleaningUp = false
     @State private var cleanupError: String?
     @State private var claudeUsage: ClaudeUsage?
+    @State private var showRecreateSheet = false
 
     enum DetailTab: String, CaseIterable, Identifiable {
         case plan = "Plan"
@@ -105,6 +106,9 @@ struct ExperimentDetailView: View {
         }
         .onDisappear {
             appState.experimentsWaitingForInput.remove(experiment.id)
+        }
+        .sheet(isPresented: $showRecreateSheet) {
+            RecreateWorktreeSheet(experiment: experiment)
         }
         .confirmationDialog(
             "This experiment has a worktree on disk.",
@@ -218,6 +222,16 @@ struct ExperimentDetailView: View {
                     }
                     .font(.caption)
                     .buttonStyle(.borderless)
+                } else if !experiment.repoPath.isEmpty && experiment.branchName != nil {
+                    // Previously had a worktree — offer recreate with branch options
+                    Button {
+                        showRecreateSheet = true
+                    } label: {
+                        Label("Recreate Worktree", systemImage: "arrow.counterclockwise.circle")
+                    }
+                    .font(.caption)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 } else if !experiment.repoPath.isEmpty {
                     Button {
                         Task { await createWorktree() }

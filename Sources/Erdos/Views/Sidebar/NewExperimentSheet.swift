@@ -27,6 +27,7 @@ struct NewExperimentSheet: View {
 
     @State private var branchMode: BranchMode = .createNew
     @State private var selectedExistingBranch: String = ""
+    @State private var showDetailPreview = false
     @Query private var allExperiments: [Experiment]
 
     private var claimedBranchNames: Set<String> {
@@ -69,18 +70,47 @@ struct NewExperimentSheet: View {
 
                     // Hypothesis
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Hypothesis").font(.caption).foregroundStyle(.secondary)
-                        TextField("", text: $hypothesis, prompt: Text("What are you exploring?"))
-                            .textFieldStyle(.roundedBorder)
-                            .lineLimit(2...4)
+                        Text("Hypothesis — What are you exploring?")
+                            .font(.caption).foregroundStyle(.secondary)
+                        TextEditor(text: $hypothesis)
+                            .font(.body)
+                            .frame(minHeight: 60, maxHeight: 100)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 5)
+                                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                            )
                     }
 
                     // Detail
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Detail").font(.caption).foregroundStyle(.secondary)
-                        TextField("", text: $detail, prompt: Text("Additional context (markdown)"), axis: .vertical)
-                            .textFieldStyle(.roundedBorder)
-                            .lineLimit(3...8)
+                        HStack {
+                            Text("Detail (markdown)")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Spacer()
+                            if !detail.isEmpty {
+                                Button(showDetailPreview ? "Edit" : "Preview") {
+                                    showDetailPreview.toggle()
+                                }
+                                .buttonStyle(.borderless)
+                                .font(.caption)
+                            }
+                        }
+                        if showDetailPreview {
+                            MarkdownContentView(content: detail, dynamicHeight: true)
+                                .frame(minHeight: 100, maxHeight: 200)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 5)
+                                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                                )
+                        } else {
+                            TextEditor(text: $detail)
+                                .font(.body)
+                                .frame(minHeight: 100, maxHeight: 200)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 5)
+                                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                                )
+                        }
                     }
 
                     // Status & Tags row
@@ -195,7 +225,7 @@ struct NewExperimentSheet: View {
             }
             .padding(16)
         }
-        .frame(width: 550, height: 600)
+        .frame(width: 550, height: 700)
         .onChange(of: selectedRepo) { _, newRepo in
             branchMode = .createNew
             selectedExistingBranch = ""

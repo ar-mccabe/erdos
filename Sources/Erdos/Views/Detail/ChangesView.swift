@@ -4,10 +4,16 @@ struct ChangesView: View {
     @Bindable var experiment: Experiment
     @Environment(AppState.self) private var appState
 
+    enum DiffMode: String, CaseIterable {
+        case unified = "Unified"
+        case sideBySide = "Side by Side"
+    }
+
     @State private var files: [GitService.FileStatus] = []
     @State private var selectedFile: GitService.FileStatus?
     @State private var diffText = ""
     @State private var showStaged = false
+    @State private var diffMode: DiffMode = .unified
     @State private var autoRefreshTimer: Timer?
     @State private var error: String?
 
@@ -133,15 +139,21 @@ struct ChangesView: View {
     @ViewBuilder
     private func fileRow(_ file: GitService.FileStatus) -> some View {
         HStack(spacing: 6) {
-            Text(statusIcon(for: file))
-                .font(.system(.caption, design: .monospaced))
+            Image(systemName: statusSymbol(for: file))
                 .foregroundStyle(statusColor(for: file))
                 .frame(width: 16)
+                .font(.caption)
 
             Text(file.path)
                 .font(.system(.caption, design: .monospaced))
                 .lineLimit(1)
                 .truncationMode(.middle)
+
+            Spacer()
+
+            Text(file.statusLabel)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -150,9 +162,9 @@ struct ChangesView: View {
     @ViewBuilder
     private var diffViewer: some View {
         VStack(spacing: 0) {
-            // Staged/unstaged picker (hide for untracked files where it's meaningless)
-            if selectedFile?.isUntracked != true {
-                HStack {
+            // Toolbar: staged/unstaged picker + diff mode toggle
+            HStack {
+                if selectedFile?.isUntracked != true {
                     Picker("View", selection: $showStaged) {
                         Text("Working Changes").tag(false)
                         Text("Staged Changes").tag(true)
@@ -160,21 +172,38 @@ struct ChangesView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .frame(width: 280)
-                    Spacer()
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
 
-                Divider()
+                Spacer()
+
+                Picker("Mode", selection: $diffMode) {
+                    ForEach(DiffMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 200)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+
+            Divider()
 
             if !diffText.isEmpty {
-                ScrollView(.vertical) {
-                    Text(coloredDiff(diffText))
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
+                switch diffMode {
+                case .unified:
+                    ScrollView(.vertical) {
+                        LazyVStack(spacing: 0) {
+                            ForEach(DiffColorizer.parseDiff(diffText)) { line in
+                                DiffLineRow(line: line)
+                            }
+                        }
                         .textSelection(.enabled)
+                        .padding(.vertical, 4)
+                    }
+                case .sideBySide:
+                    SideBySideDiffView(diffText: diffText)
                 }
             } else {
                 ContentUnavailableView {
@@ -285,21 +314,27 @@ struct ChangesView: View {
         }
     }
 
-    // MARK: - Diff Coloring
-
-    private func coloredDiff(_ text: String) -> AttributedString {
-        DiffColorizer.coloredDiff(text)
-    }
-
     // MARK: - Helpers
 
-    private func statusIcon(for file: GitService.FileStatus) -> String {
-        if file.isUntracked { return "?" }
-        return "\(file.index)\(file.worktree)"
+    private func statusSymbol(for file: GitService.FileStatus) -> String {
+        if file.isUntracked { return "questionmark.circle" }
+        switch file.index {
+        case "A": return "plus.circle.fill"
+        case "D": return "minus.circle.fill"
+        case "R": return "arrow.right.circle.fill"
+        default: break
+        }
+        return "pencil.circle.fill"
     }
 
     private func statusColor(for file: GitService.FileStatus) -> Color {
         if file.isUntracked { return .secondary }
+        switch file.index {
+        case "A": return .green
+        case "D": return .red
+        case "R": return .blue
+        default: break
+        }
         if file.isStaged { return .green }
         return .orange
     }

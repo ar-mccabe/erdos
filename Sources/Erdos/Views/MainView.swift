@@ -39,6 +39,11 @@ struct MainView: View {
                 visitedExperimentIDs.insert(exp.persistentModelID)
             }
         }
+        .onChange(of: experiments.count) { _, _ in
+            // Prune stale IDs for deleted experiments
+            let currentIDs = Set(experiments.map(\.persistentModelID))
+            visitedExperimentIDs.formIntersection(currentIDs)
+        }
         .sheet(isPresented: $state.isCreatingExperiment) {
             NewExperimentSheet()
         }
