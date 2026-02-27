@@ -102,6 +102,7 @@ struct ArtifactsView: View {
             }
         }
         .task { await refresh() }
+        .task(id: selectedItem) { await loadContent(for: selectedItem) }
         .onAppear { startAutoRefresh() }
         .onDisappear { autoRefreshTimer?.invalidate() }
     }
@@ -210,9 +211,6 @@ struct ArtifactsView: View {
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .background(Color(nsColor: .controlBackgroundColor))
-        .onChange(of: selectedItem) { _, newValue in
-            Task { await loadContent(for: newValue) }
-        }
     }
 
     @ViewBuilder
