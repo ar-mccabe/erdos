@@ -4,16 +4,10 @@ struct ChangesView: View {
     @Bindable var experiment: Experiment
     @Environment(AppState.self) private var appState
 
-    enum DiffMode: String, CaseIterable {
-        case unified = "Unified"
-        case sideBySide = "Side by Side"
-    }
-
     @State private var files: [GitService.FileStatus] = []
     @State private var selectedFile: GitService.FileStatus?
     @State private var diffText = ""
     @State private var showStaged = false
-    @State private var diffMode: DiffMode = .unified
     @State private var autoRefreshTimer: Timer?
     @State private var error: String?
 
@@ -175,15 +169,6 @@ struct ChangesView: View {
                 }
 
                 Spacer()
-
-                Picker("Mode", selection: $diffMode) {
-                    ForEach(DiffMode.allCases, id: \.self) { mode in
-                        Text(mode.rawValue).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 200)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -191,19 +176,14 @@ struct ChangesView: View {
             Divider()
 
             if !diffText.isEmpty {
-                switch diffMode {
-                case .unified:
-                    ScrollView(.vertical) {
-                        LazyVStack(spacing: 0) {
-                            ForEach(DiffColorizer.parseDiff(diffText)) { line in
-                                DiffLineRow(line: line)
-                            }
+                ScrollView(.vertical) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(DiffColorizer.parseDiff(diffText)) { line in
+                            DiffLineRow(line: line)
                         }
-                        .textSelection(.enabled)
-                        .padding(.vertical, 4)
                     }
-                case .sideBySide:
-                    SideBySideDiffView(diffText: diffText)
+                    .textSelection(.enabled)
+                    .padding(.vertical, 4)
                 }
             } else {
                 ContentUnavailableView {

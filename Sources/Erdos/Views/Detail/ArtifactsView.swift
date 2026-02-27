@@ -60,6 +60,16 @@ enum ArtifactItem: Identifiable, Hashable {
     }
 }
 
+// MARK: - DirectoryNode
+
+private struct DirectoryNode: Identifiable {
+    let name: String       // just the component name, e.g. "Views"
+    let path: String       // full relative path, e.g. "Sources/Erdos/Views"
+    var files: [GitService.ChangedFile]
+    var children: [DirectoryNode]
+    var id: String { path }
+}
+
 // MARK: - ArtifactsView
 
 struct ArtifactsView: View {
@@ -80,13 +90,15 @@ struct ArtifactsView: View {
                 noWorktreeState
             } else if documentPaths.isEmpty && experiment.notes.isEmpty && changedFiles.isEmpty && error == nil {
                 emptyState
-            } else {
+            } else if selectedItem != nil {
                 HSplitView {
                     artifactListPane
                         .frame(minWidth: 180, idealWidth: 240)
                     contentPreview
                         .frame(minWidth: 300)
                 }
+            } else {
+                artifactListPane
             }
         }
         .task { await refresh() }
@@ -103,7 +115,6 @@ struct ArtifactsView: View {
             Divider()
             artifactList
         }
-        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Toolbar
@@ -177,9 +188,10 @@ struct ArtifactsView: View {
 
             if !changedFiles.isEmpty {
                 Section("Changed Files") {
-                    ForEach(changedFilesByDirectory, id: \.directory) { group in
-                        if group.directory == "." {
-                            ForEach(group.files) { file in
+                    ForEach(changedFilesTree) { node in
+                        if node.path == "." {
+                            // Root-level files rendered flat
+                            ForEach(node.files) { file in
                                 let item = ArtifactItem.changedFile(file)
                                 artifactRow(item)
                                     .tag(item)
@@ -189,25 +201,7 @@ struct ArtifactsView: View {
                                     }
                             }
                         } else {
-                            DisclosureGroup {
-                                ForEach(group.files) { file in
-                                    let item = ArtifactItem.changedFile(file)
-                                    artifactRow(item)
-                                        .tag(item)
-                                        .contextMenu {
-                                            openInFinderButton(relativePath: file.path)
-                                            copyPathButton(relativePath: file.path)
-                                        }
-                                }
-                            } label: {
-                                Label {
-                                    Text(group.directory)
-                                        .font(.system(.caption, design: .monospaced))
-                                } icon: {
-                                    Image(systemName: "folder")
-                                }
-                                .foregroundStyle(.secondary)
-                            }
+                            directoryTreeView(node)
                         }
                     }
                 }
@@ -237,6 +231,33 @@ struct ArtifactsView: View {
                     .lineLimit(1)
             }
         }
+    }
+
+    private func directoryTreeView(_ node: DirectoryNode) -> AnyView {
+        AnyView(
+            DisclosureGroup {
+                ForEach(node.children) { child in
+                    directoryTreeView(child)
+                }
+                ForEach(node.files) { file in
+                    let item = ArtifactItem.changedFile(file)
+                    artifactRow(item)
+                        .tag(item)
+                        .contextMenu {
+                            openInFinderButton(relativePath: file.path)
+                            copyPathButton(relativePath: file.path)
+                        }
+                }
+            } label: {
+                Label {
+                    Text(node.name)
+                        .font(.system(.caption, design: .monospaced))
+                } icon: {
+                    Image(systemName: "folder")
+                }
+                .foregroundStyle(.secondary)
+            }
+        )
     }
 
     @ViewBuilder
@@ -344,12 +365,63 @@ struct ArtifactsView: View {
         }
     }
 
-    private var changedFilesByDirectory: [(directory: String, files: [GitService.ChangedFile])] {
-        let grouped = Dictionary(grouping: changedFiles) { file in
-            (file.path as NSString).deletingLastPathComponent
+    private var changedFilesTree: [DirectoryNode] {
+        // Use a class-based builder to make tree construction simple
+        class NodeBuilder {
+            let name: String
+            let path: String
+            var files: [GitService.ChangedFile] = []
+            var children: [String: NodeBuilder] = [:]
+
+            init(name: String, path: String) {
+                self.name = name
+                self.path = path
+            }
+
+            func toNode() -> DirectoryNode {
+                let sortedChildren = children.values
+                    .map { $0.toNode() }
+                    .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+                let sortedFiles = files.sorted { $0.path < $1.path }
+                return DirectoryNode(name: name, path: path, files: sortedFiles, children: sortedChildren)
+            }
         }
-        return grouped.sorted { $0.key < $1.key }
-            .map { (directory: $0.key.isEmpty ? "." : $0.key, files: $0.value.sorted { $0.path < $1.path }) }
+
+        let root = NodeBuilder(name: "", path: "")
+
+        for file in changedFiles {
+            let components = file.path.split(separator: "/").map(String.init)
+            guard components.count > 1 else {
+                root.files.append(file)
+                continue
+            }
+
+            let dirComponents = components.dropLast()
+            var current = root
+            var pathSoFar = ""
+
+            for component in dirComponents {
+                pathSoFar = pathSoFar.isEmpty ? component : "\(pathSoFar)/\(component)"
+                if let existing = current.children[component] {
+                    current = existing
+                } else {
+                    let child = NodeBuilder(name: component, path: pathSoFar)
+                    current.children[component] = child
+                    current = child
+                }
+            }
+
+            current.files.append(file)
+        }
+
+        let rootNode = root.toNode()
+        // Root-level files get a special "." node; real directories come first
+        if rootNode.files.isEmpty {
+            return rootNode.children
+        } else {
+            let rootFilesNode = DirectoryNode(name: ".", path: ".", files: rootNode.files, children: [])
+            return rootNode.children + [rootFilesNode]
+        }
     }
 
     private func refresh() async {
