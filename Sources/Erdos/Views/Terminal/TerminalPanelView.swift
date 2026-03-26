@@ -29,6 +29,12 @@ struct TerminalPanelView: View {
                 ForEach(tabs) { tab in
                     Button {
                         selectedTabId = tab.id
+                        // Re-sync PTY size in case the window was resized while this tab was hidden
+                        if let terminal = terminalViews[tab.id] {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                terminal.resyncPTYSize()
+                            }
+                        }
                     } label: {
                         HStack(spacing: 4) {
                             Text(tab.label)

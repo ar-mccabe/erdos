@@ -43,32 +43,18 @@ struct TerminalRepresentable: NSViewRepresentable {
         }
         let env = enriched.map { "\($0.key)=\($0.value)" }
 
-        // Start the process
-        terminal.startProcess(
+        // Defer process start until the view has a non-zero frame.
+        // This ensures the PTY is created with the correct terminal dimensions,
+        // preventing garbled rendering in TUI apps like Claude Code.
+        terminal.configureDeferredStart(
             executable: shell,
             args: [],
             environment: env,
-            execName: nil
+            workingDirectory: workingDirectory,
+            initialCommand: initialCommand,
+            delayedInput: delayedInput,
+            delayedInputDelay: delayedInputDelay
         )
-
-        // cd to working directory
-        let cdCommand = "cd \"\(workingDirectory)\" && clear\n"
-        terminal.send(txt: cdCommand)
-
-        // Execute initial command if provided
-        if let cmd = initialCommand {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                terminal.send(txt: cmd + "\n")
-            }
-        }
-
-        // Send delayed input (e.g. prompt text into an interactive claude session)
-        if let input = delayedInput {
-            let baseDelay = initialCommand != nil ? 0.5 + delayedInputDelay : delayedInputDelay
-            DispatchQueue.main.asyncAfter(deadline: .now() + baseDelay) {
-                terminal.send(txt: input + "\n")
-            }
-        }
 
         DispatchQueue.main.async {
             self.terminalView = terminal
