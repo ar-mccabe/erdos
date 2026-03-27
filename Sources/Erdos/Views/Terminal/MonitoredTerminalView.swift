@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import SwiftTerm
 
 class MonitoredTerminalView: LocalProcessTerminalView {
@@ -15,6 +16,79 @@ class MonitoredTerminalView: LocalProcessTerminalView {
         workingDirectory: String,
         initialCommand: String?, delayedInput: String?, delayedInputDelay: TimeInterval
     )?
+
+    // MARK: - Kitty Keyboard Protocol workaround
+
+    // SwiftTerm 1.12.0 supports the Kitty keyboard protocol. When Claude Code
+    // enables it, functional keys (arrows, etc.) get encoded in the Kitty format
+    // which produces garbled output. We install an NSEvent monitor to intercept
+    // these keys and send standard xterm escape sequences instead.
+    // (keyDown/keyUp can't be overridden because they aren't `open` in SwiftTerm.)
+    nonisolated(unsafe) private var keyEventMonitor: Any?
+
+    private func installKeyEventMonitor() {
+        keyEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
+            guard let self = self,
+                  self.window?.firstResponder === self,
+                  !self.getTerminal().keyboardEnhancementFlags.isEmpty else {
+                return event
+            }
+
+            if event.type == .keyUp {
+                // Suppress Kitty key-release events that cause garbled output.
+                return nil
+            }
+
+            // keyDown: intercept arrow keys and send standard xterm sequences
+            guard let chars = event.charactersIgnoringModifiers,
+                  let scalar = chars.unicodeScalars.first else {
+                return event
+            }
+
+            let letter: UInt8
+            switch Int(scalar.value) {
+            case NSUpArrowFunctionKey:    letter = 0x41  // A
+            case NSDownArrowFunctionKey:  letter = 0x42  // B
+            case NSRightArrowFunctionKey: letter = 0x43  // C
+            case NSLeftArrowFunctionKey:  letter = 0x44  // D
+            default: return event
+            }
+
+            // Build xterm modifier parameter: 1 + (shift:1 + alt:2 + ctrl:4)
+            let flags = event.modifierFlags
+            var mod = 0
+            if flags.contains(.shift)   { mod += 1 }
+            if flags.contains(.option)  { mod += 2 }
+            if flags.contains(.control) { mod += 4 }
+
+            if mod == 0 {
+                // Plain arrow — use standard or application-cursor sequence
+                let app = self.getTerminal().applicationCursor
+                let prefix: UInt8 = app ? 0x4f : 0x5b  // O or [
+                self.send([0x1b, prefix, letter])
+            } else {
+                // Modified arrow — ESC [ 1 ; {mod+1} {letter}
+                let param = UInt8(0x31 + mod)  // ASCII digit for mod+1 (2–8)
+                self.send([0x1b, 0x5b, 0x31, 0x3b, param, letter])
+            }
+            return nil
+        }
+    }
+
+    private func removeKeyEventMonitor() {
+        if let monitor = keyEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            keyEventMonitor = nil
+        }
+    }
+
+    deinit {
+        if let monitor = keyEventMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
+    }
+
+    // MARK: - Deferred process start
 
     /// Configure the process to start once the view has a real frame.
     func configureDeferredStart(
@@ -60,6 +134,8 @@ class MonitoredTerminalView: LocalProcessTerminalView {
                     self?.send(txt: input + "\n")
                 }
             }
+
+            installKeyEventMonitor()
         }
     }
 
@@ -83,6 +159,7 @@ class MonitoredTerminalView: LocalProcessTerminalView {
         DispatchQueue.main.async { [weak self] in
             self?.isProcessRunning = false
         }
+        removeKeyEventMonitor()
     }
 
     /// Kill the shell and all its child processes.
