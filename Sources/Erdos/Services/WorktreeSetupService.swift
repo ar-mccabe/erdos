@@ -1,17 +1,22 @@
 import Foundation
 
 enum WorktreeSetupService {
+    struct SetupResult {
+        var envName: String?
+        var initHook: String?
+    }
+
     /// Applies `.erdos.yml` config to a newly created worktree.
-    /// Returns the generated env var name if configured, or `nil`.
+    /// Returns env var name and init hook command if configured.
     @discardableResult
     static func applyConfig(
         repoPath: String,
         worktreePath: String,
         branchName: String
-    ) -> String? {
+    ) -> SetupResult {
         guard let config = ErdosConfig.load(repoPath: repoPath),
               let worktreeConfig = config.worktree else {
-            return nil
+            return SetupResult()
         }
 
         let fm = FileManager.default
@@ -40,7 +45,7 @@ enum WorktreeSetupService {
             }
         }
 
-        return envName
+        return SetupResult(envName: envName, initHook: worktreeConfig.initHook)
     }
 
     private static func copyFiles(

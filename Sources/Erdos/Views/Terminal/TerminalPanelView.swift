@@ -117,7 +117,9 @@ struct TerminalPanelView: View {
         }
         .onAppear {
             if tabs.isEmpty {
-                addTab()
+                let initCommand = experiment.pendingInitHook
+                experiment.pendingInitHook = nil
+                addTab(label: initCommand != nil ? "setup" : "zsh", command: initCommand)
             }
             startIdleCheckTimer()
         }

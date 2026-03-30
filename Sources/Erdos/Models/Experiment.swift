@@ -128,6 +128,8 @@ final class Experiment {
     var pausedContext: String?
     var envVar: String?
 
+    @Transient var pendingInitHook: String?
+
     @Relationship(deleteRule: .cascade, inverse: \Note.experiment)
     var notes: [Note] = []
 

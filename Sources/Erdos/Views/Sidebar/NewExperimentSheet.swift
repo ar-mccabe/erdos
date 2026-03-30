@@ -317,13 +317,13 @@ struct NewExperimentSheet: View {
                 )
                 experiment.worktreePath = worktreePath
 
-                if let envName = WorktreeSetupService.applyConfig(
+                let setupResult = WorktreeSetupService.applyConfig(
                     repoPath: repo.path,
                     worktreePath: worktreePath,
                     branchName: effectiveBranch
-                ) {
-                    experiment.envVar = envName
-                }
+                )
+                experiment.envVar = setupResult.envName
+                experiment.pendingInitHook = setupResult.initHook
 
                 let summary = branchMode == .useExisting
                     ? "Created worktree for existing branch '\(effectiveBranch)'"

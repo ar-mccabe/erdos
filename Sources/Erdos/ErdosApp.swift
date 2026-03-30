@@ -97,7 +97,8 @@ struct ErdosApp: App {
 
         Window("Settings", id: "settings") {
             SettingsView()
+                .environment(appState)
         }
-        .defaultSize(width: 500, height: 350)
+        .defaultSize(width: 500, height: 700)
     }
 }

@@ -230,8 +230,12 @@ struct PlanView: View {
         let tmpFile = NSTemporaryDirectory() + "erdos-prompt-\(UUID().uuidString).txt"
         try? prompt.write(toFile: tmpFile, atomically: true, encoding: .utf8)
 
-        let model = ErdosSettings.shared.defaultModel
-        let command = "claude \"$(cat '\(tmpFile)')\" --model \(model) --permission-mode plan --allowed-tools 'Read,Glob,Grep,WebSearch,WebFetch,Task,\"Bash(git log:*)\",\"Bash(git diff:*)\",\"Bash(git show:*)\",\"Bash(git status:*)\",\"Bash(git branch:*)\",\"Bash(git -C:*)\"'; rm -f '\(tmpFile)'"
+        let config = loadResearchPlanConfig()
+        let model = config?.model ?? ErdosSettings.shared.defaultModel
+        let permissionMode = config?.permissionMode ?? "plan"
+        let allowedTools = config?.allowedTools ?? "Read,Glob,Grep,WebSearch,WebFetch,Task,\"Bash(git log:*)\",\"Bash(git diff:*)\",\"Bash(git show:*)\",\"Bash(git status:*)\",\"Bash(git branch:*)\",\"Bash(git -C:*)\""
+        let extraFlags = config?.extraFlags.map { " \($0)" } ?? ""
+        let command = "claude \"$(cat '\(tmpFile)')\" --model \(model) --permission-mode \(permissionMode) --allowed-tools '\(allowedTools)'\(extraFlags); rm -f '\(tmpFile)'"
 
         // Record launch time so we can find the plan file Claude writes to <worktree>/.claude/plans/
         planLaunchTime = Date()
@@ -253,8 +257,18 @@ struct PlanView: View {
         startAutoRefresh()
     }
 
+    private func loadResearchPlanConfig() -> ErdosConfig.ResearchPlanConfig? {
+        ErdosConfig.load(repoPath: experiment.repoPath)?.researchPlan
+    }
+
     private func buildResearchPrompt() -> String {
+        let config = loadResearchPlanConfig()
         var parts: [String] = []
+
+        if let prefix = config?.promptPrefix {
+            parts.append(prefix)
+            parts.append("")
+        }
 
         parts.append("You are researching an experiment idea. Your goal is to explore the codebase, understand the relevant architecture, and create a detailed implementation plan.")
 
@@ -289,6 +303,11 @@ struct PlanView: View {
         - Risks and open questions
         - Estimated complexity
         """)
+
+        if let suffix = config?.promptSuffix {
+            parts.append("")
+            parts.append(suffix)
+        }
 
         return parts.joined(separator: "\n")
     }

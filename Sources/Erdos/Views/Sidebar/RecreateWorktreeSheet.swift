@@ -132,13 +132,13 @@ struct RecreateWorktreeSheet: View {
             experiment.worktreePath = worktreePath
             experiment.branchName = branchName
 
-            if let envName = WorktreeSetupService.applyConfig(
+            let setupResult = WorktreeSetupService.applyConfig(
                 repoPath: experiment.repoPath,
                 worktreePath: worktreePath,
                 branchName: branchName
-            ) {
-                experiment.envVar = envName
-            }
+            )
+            experiment.envVar = setupResult.envName
+            experiment.pendingInitHook = setupResult.initHook
 
             // Seed .erdos/notes/ with existing notes
             appState.noteSyncService.exportAllNotes(experiment: experiment)
