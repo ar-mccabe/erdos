@@ -60,8 +60,8 @@ struct ExperimentRowView: View {
         }
 
         // Clear selection if this experiment is selected
-        if appState.selectedExperiment?.persistentModelID == experiment.persistentModelID {
-            appState.selectedExperiment = nil
+        if appState.selection == .experiment(experiment.persistentModelID) {
+            appState.selection = nil
         }
 
         modelContext.delete(experiment)

@@ -9,7 +9,7 @@ struct SidebarView: View {
     var body: some View {
         @Bindable var state = appState
 
-        List(selection: $state.selectedExperiment) {
+        List(selection: $state.selection) {
             if !filteredExperiments.isEmpty {
                 ForEach(Array(groupedStatuses.enumerated()), id: \.element) { index, status in
                     let exps = experimentsFor(status: status)
@@ -22,7 +22,7 @@ struct SidebarView: View {
                         Section {
                             ForEach(exps) { experiment in
                                 ExperimentRowView(experiment: experiment)
-                                    .tag(experiment)
+                                    .tag(SidebarSelection.experiment(experiment.persistentModelID))
                             }
                         } header: {
                             HStack(spacing: 6) {
@@ -49,12 +49,21 @@ struct SidebarView: View {
         .searchable(text: $state.searchText, placement: .sidebar, prompt: "Search experiments...")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button {
-                    appState.isCreatingExperiment = true
-                } label: {
-                    Image(systemName: "plus")
+                HStack(spacing: 4) {
+                    Button {
+                        appState.isCreatingExperiment = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .help("New Experiment (⌘N)")
+
+                    Button {
+                        appState.selection = .adHocTerminals
+                    } label: {
+                        Image(systemName: "terminal")
+                    }
+                    .help("Terminals")
                 }
-                .help("New Experiment (⌘N)")
             }
         }
     }

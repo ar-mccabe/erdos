@@ -349,7 +349,7 @@ struct NewExperimentSheet: View {
         modelContext.insert(event)
 
         try? modelContext.save()
-        appState.selectedExperiment = experiment
+        appState.selection = .experiment(experiment.persistentModelID)
         dismiss()
     }
 }

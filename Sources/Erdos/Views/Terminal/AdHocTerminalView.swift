@@ -1,14 +1,11 @@
 import SwiftUI
 import SwiftTerm
 
-struct TerminalPanelView: View {
-    let experiment: Experiment
-    @Binding var hasWaitingClaudeSession: Bool
+struct AdHocTerminalView: View {
     @Environment(AppState.self) private var appState
     @State private var tabs: [TerminalTab] = []
     @State private var selectedTabId: UUID?
     @State private var terminalViews: [UUID: MonitoredTerminalView] = [:]
-    @State private var idleCheckTimer: Timer?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,7 +14,6 @@ struct TerminalPanelView: View {
                 ForEach(tabs) { tab in
                     Button {
                         selectedTabId = tab.id
-                        // Re-sync PTY size in case the window was resized while this tab was hidden
                         if let terminal = terminalViews[tab.id] {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                                 terminal.resyncPTYSize()
@@ -82,7 +78,7 @@ struct TerminalPanelView: View {
             ZStack {
                 ForEach(tabs) { tab in
                     TerminalRepresentable(
-                        workingDirectory: experiment.worktreePath ?? experiment.repoPath,
+                        workingDirectory: NSHomeDirectory(),
                         initialCommand: tab.initialCommand,
                         delayedInput: tab.delayedInput,
                         terminalView: Binding(
@@ -105,48 +101,20 @@ struct TerminalPanelView: View {
         }
         .onAppear {
             if tabs.isEmpty {
-                let initCommand = experiment.pendingInitHook
-                experiment.pendingInitHook = nil
-                addTab(label: initCommand != nil ? "setup" : "zsh", command: initCommand)
-            }
-            startIdleCheckTimer()
-        }
-        .onDisappear {
-            idleCheckTimer?.invalidate()
-            idleCheckTimer = nil
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .launchClaude)) { notification in
-            // Only handle notifications targeted at this experiment
-            if let targetId = notification.userInfo?["experimentId"] as? String,
-               targetId != experiment.id.uuidString {
-                return
-            }
-
-            if let prompt = notification.userInfo?["prompt"] as? String {
-                // Interactive claude with a prompt typed in after launch
-                let label = notification.userInfo?["label"] as? String ?? "Claude"
-                addTab(label: label, command: "claude", delayedInput: prompt)
-            } else if let command = notification.userInfo?["command"] as? String {
-                // Custom command
-                let label = notification.userInfo?["label"] as? String ?? "Claude"
-                addTab(label: label, command: command)
-            } else if let sessionId = notification.userInfo?["sessionId"] as? String {
-                addTab(label: "Claude (resume)", command: "claude --resume \(sessionId)")
-            } else {
-                addTab(label: "Claude", command: "claude")
+                addTab()
             }
         }
     }
 
-    private func addTab(label: String = "zsh", command: String? = nil, delayedInput: String? = nil) {
-        let tab = TerminalTab(label: label, initialCommand: command, delayedInput: delayedInput)
+    private func addTab(label: String = "zsh", command: String? = nil) {
+        let tab = TerminalTab(label: label, initialCommand: command)
         tabs.append(tab)
         selectedTabId = tab.id
     }
 
     private func resetTerminal(_ id: UUID) {
         guard let terminal = terminalViews[id] else { return }
-        terminal.send(txt: "\u{1b}c")  // ESC c — full terminal reset
+        terminal.send(txt: "\u{1b}c")
     }
 
     private func closeTab(_ id: UUID) {
@@ -161,31 +129,5 @@ struct TerminalPanelView: View {
         if selectedTabId == id {
             selectedTabId = tabs.last?.id
         }
-    }
-
-    private func startIdleCheckTimer() {
-        idleCheckTimer?.invalidate()
-        idleCheckTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
-            DispatchQueue.main.async {
-                checkForIdleClaude()
-            }
-        }
-    }
-
-    private func checkForIdleClaude() {
-        let now = Date()
-        let idleThreshold: TimeInterval = 30
-
-        let waiting = tabs.contains { tab in
-            guard tab.isClaudeTab,
-                  let terminal = terminalViews[tab.id],
-                  terminal.isProcessRunning,
-                  let lastOutput = terminal.lastOutputTime else {
-                return false
-            }
-            return now.timeIntervalSince(lastOutput) > idleThreshold
-        }
-
-        hasWaitingClaudeSession = waiting
     }
 }

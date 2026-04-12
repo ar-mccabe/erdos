@@ -8,6 +8,7 @@ struct MainView: View {
 
     /// Experiments that have been opened at least once — their views stay alive
     @State private var visitedExperimentIDs: Set<PersistentIdentifier> = []
+    @State private var hasVisitedAdHocTerminals = false
 
     var body: some View {
         @Bindable var state = appState
@@ -16,15 +17,22 @@ struct MainView: View {
             SidebarView()
         } detail: {
             ZStack {
+                // Ad-hoc terminals — stays alive once visited
+                if hasVisitedAdHocTerminals {
+                    AdHocTerminalView()
+                        .opacity(appState.selection == .adHocTerminals ? 1 : 0)
+                        .allowsHitTesting(appState.selection == .adHocTerminals)
+                }
+
                 // Keep all visited experiment views alive (preserves terminals)
                 ForEach(experiments.filter { visitedExperimentIDs.contains($0.persistentModelID) }) { experiment in
                     ExperimentDetailView(experiment: experiment)
-                        .opacity(experiment.persistentModelID == appState.selectedExperiment?.persistentModelID ? 1 : 0)
-                        .allowsHitTesting(experiment.persistentModelID == appState.selectedExperiment?.persistentModelID)
+                        .opacity(appState.selectedExperimentID == experiment.persistentModelID ? 1 : 0)
+                        .allowsHitTesting(appState.selectedExperimentID == experiment.persistentModelID)
                 }
 
                 // Empty state when nothing selected
-                if appState.selectedExperiment == nil {
+                if appState.selection == nil {
                     ContentUnavailableView(
                         "No Experiment Selected",
                         systemImage: "flask",
@@ -34,9 +42,14 @@ struct MainView: View {
             }
         }
         .navigationSplitViewColumnWidth(min: 220, ideal: 260, max: 350)
-        .onChange(of: appState.selectedExperiment) { _, newExperiment in
-            if let exp = newExperiment {
-                visitedExperimentIDs.insert(exp.persistentModelID)
+        .onChange(of: appState.selection) { _, newSelection in
+            switch newSelection {
+            case .adHocTerminals:
+                hasVisitedAdHocTerminals = true
+            case .experiment(let id):
+                visitedExperimentIDs.insert(id)
+            case nil:
+                break
             }
         }
         .onChange(of: experiments.count) { _, _ in

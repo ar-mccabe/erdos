@@ -2,10 +2,20 @@ import Foundation
 import SwiftData
 import SwiftTerm
 
+enum SidebarSelection: Hashable {
+    case adHocTerminals
+    case experiment(PersistentIdentifier)
+}
+
 @Observable
 @MainActor
 final class AppState {
-    var selectedExperiment: Experiment?
+    var selection: SidebarSelection?
+
+    var selectedExperimentID: PersistentIdentifier? {
+        if case .experiment(let id) = selection { return id }
+        return nil
+    }
     var isCreatingExperiment = false
     var searchText = ""
     var showSettings = false
