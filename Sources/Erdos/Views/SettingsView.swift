@@ -52,12 +52,51 @@ struct SettingsView: View {
                 Text("Path to the Claude Code CLI binary.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
 
+            Section("Terminal Environment") {
+                LabeledContent("Env Vars") {
+                    TextEditor(text: $settings.terminalEnvVars)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minHeight: 80)
+                        .border(Color.secondary.opacity(0.3))
+                }
+                Text("One KEY=VALUE per line, injected into every terminal session. "
+                    + "CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1 keeps Claude Code on the classic "
+                    + "renderer so mouse scrolling, selection, and copy work in Erdos terminals.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Research Command Defaults") {
                 Picker("Default Model", selection: $settings.defaultModel) {
                     ForEach(ErdosSettings.availableModels, id: \.self) { model in
                         Text(model).tag(model)
                     }
                 }
+
+                LabeledContent("Permission Mode") {
+                    TextField("", text: $settings.defaultPermissionMode, prompt: Text("plan"))
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                LabeledContent("Allowed Tools") {
+                    TextEditor(text: $settings.defaultAllowedTools)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(minHeight: 60)
+                        .border(Color.secondary.opacity(0.3))
+                }
+
+                LabeledContent("Extra Flags") {
+                    TextField("", text: $settings.defaultExtraFlags,
+                              prompt: Text("e.g. --login work --effort high"))
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                Text("Applied to every research launch. Per-repo .erdos.yml values override these. "
+                    + "Extra Flags is a free-form string appended verbatim to the claude command.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Repository Defaults") {
@@ -114,7 +153,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 500, height: selectedRepo != nil ? 700 : 350)
+        .frame(width: 500, height: selectedRepo != nil ? 980 : 640)
         .navigationTitle("Settings")
         .onChange(of: selectedRepo) { _, newRepo in
             loadRepoConfig(for: newRepo)

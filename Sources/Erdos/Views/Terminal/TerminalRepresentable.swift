@@ -41,6 +41,11 @@ struct TerminalRepresentable: NSViewRepresentable {
         if enriched["TERM"] == nil {
             enriched["TERM"] = "xterm-256color"
         }
+        // User-configured terminal env vars (Settings). Defaults to
+        // CLAUDE_CODE_DISABLE_ALTERNATE_SCREEN=1 so scroll/copy work in SwiftTerm.
+        for (key, value) in ErdosSettings.shared.parsedTerminalEnvVars {
+            enriched[key] = value
+        }
         let env = enriched.map { "\($0.key)=\($0.value)" }
 
         // Defer process start until the view has a non-zero frame.

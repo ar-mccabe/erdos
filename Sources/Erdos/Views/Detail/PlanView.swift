@@ -231,10 +231,13 @@ struct PlanView: View {
         try? prompt.write(toFile: tmpFile, atomically: true, encoding: .utf8)
 
         let config = loadResearchPlanConfig()
-        let model = config?.model ?? ErdosSettings.shared.defaultModel
-        let permissionMode = config?.permissionMode ?? "plan"
-        let allowedTools = config?.allowedTools ?? "Read,Glob,Grep,WebSearch,WebFetch,Task,\"Bash(git log:*)\",\"Bash(git diff:*)\",\"Bash(git show:*)\",\"Bash(git status:*)\",\"Bash(git branch:*)\",\"Bash(git -C:*)\""
-        let extraFlags = config?.extraFlags.map { " \($0)" } ?? ""
+        let s = ErdosSettings.shared
+        let model = config?.model ?? s.defaultModel
+        let permissionMode = config?.permissionMode ?? s.defaultPermissionMode
+        let allowedTools = config?.allowedTools ?? s.defaultAllowedTools
+        let repoExtra = config?.extraFlags.map { " \($0)" } ?? ""
+        let globalExtra = s.defaultExtraFlags.isEmpty ? "" : " \(s.defaultExtraFlags)"
+        let extraFlags = repoExtra.isEmpty ? globalExtra : repoExtra
         let command = "claude \"$(cat '\(tmpFile)')\" --model \(model) --permission-mode \(permissionMode) --allowed-tools '\(allowedTools)'\(extraFlags); rm -f '\(tmpFile)'"
 
         // Record launch time so we can find the plan file Claude writes to <worktree>/.claude/plans/
