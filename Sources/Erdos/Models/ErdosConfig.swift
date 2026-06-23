@@ -1,7 +1,7 @@
 import Foundation
 import Yams
 
-struct ErdosConfig: Codable, Sendable {
+struct ErdosConfig: Codable, Sendable, Equatable {
     var worktree: WorktreeConfig?
     var researchPlan: ResearchPlanConfig?
 
@@ -10,7 +10,7 @@ struct ErdosConfig: Codable, Sendable {
         case researchPlan = "research_plan"
     }
 
-    struct WorktreeConfig: Codable, Sendable {
+    struct WorktreeConfig: Codable, Sendable, Equatable {
         var copyFiles: [String]?
         var envVar: EnvVarConfig?
         var initHook: String?
@@ -22,7 +22,7 @@ struct ErdosConfig: Codable, Sendable {
         }
     }
 
-    struct EnvVarConfig: Codable, Sendable {
+    struct EnvVarConfig: Codable, Sendable, Equatable {
         var fromBranch: Bool?
         var copyBase: String?
 
@@ -32,7 +32,7 @@ struct ErdosConfig: Codable, Sendable {
         }
     }
 
-    struct ResearchPlanConfig: Codable, Sendable {
+    struct ResearchPlanConfig: Codable, Sendable, Equatable {
         var promptPrefix: String?
         var promptSuffix: String?
         var model: String?

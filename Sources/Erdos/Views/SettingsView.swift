@@ -13,6 +13,10 @@ struct SettingsView: View {
     @State private var permissionMode = ""
     @State private var allowedTools = ""
     @State private var extraFlags = ""
+    /// True while loadRepoConfig is populating the fields, so the per-field
+    /// onChange handlers don't treat the load as a user edit. Mirrors the
+    /// isWriting/isSyncing guard pattern in NoteSyncService.
+    @State private var isLoadingRepoConfig = false
 
     var body: some View {
         Form {
@@ -168,6 +172,11 @@ struct SettingsView: View {
     }
 
     private func loadRepoConfig(for repo: RepoDiscoveryService.RepoInfo?) {
+        isLoadingRepoConfig = true
+        // Reset after the field assignments below have flushed their onChange
+        // handlers on the next runloop tick.
+        defer { DispatchQueue.main.async { isLoadingRepoConfig = false } }
+
         guard let repo else {
             repoConfig = ErdosConfig()
             clearFields()
@@ -194,45 +203,58 @@ struct SettingsView: View {
     }
 
     private func saveRepoConfig() {
+        // Don't treat field population during a repo load as a user edit.
+        guard !isLoadingRepoConfig else { return }
         guard let repo = selectedRepo else { return }
+
+        // Build a candidate starting from the loaded config, so fields this UI
+        // doesn't expose (worktree.copyFiles / env_var) are preserved verbatim.
+        var candidate = repoConfig
 
         // Update worktree config
         let hookValue = initHook.isEmpty ? nil : initHook
-        if hookValue != nil || repoConfig.worktree != nil {
-            if repoConfig.worktree == nil {
-                repoConfig.worktree = ErdosConfig.WorktreeConfig()
+        if hookValue != nil || candidate.worktree != nil {
+            if candidate.worktree == nil {
+                candidate.worktree = ErdosConfig.WorktreeConfig()
             }
-            repoConfig.worktree?.initHook = hookValue
+            candidate.worktree?.initHook = hookValue
         }
 
         // Update research plan config
         let hasResearchPlan = !promptPrefix.isEmpty || !promptSuffix.isEmpty
             || !repoModel.isEmpty || !permissionMode.isEmpty
             || !allowedTools.isEmpty || !extraFlags.isEmpty
-        if hasResearchPlan || repoConfig.researchPlan != nil {
-            if repoConfig.researchPlan == nil {
-                repoConfig.researchPlan = ErdosConfig.ResearchPlanConfig()
+        if hasResearchPlan || candidate.researchPlan != nil {
+            if candidate.researchPlan == nil {
+                candidate.researchPlan = ErdosConfig.ResearchPlanConfig()
             }
-            repoConfig.researchPlan?.promptPrefix = promptPrefix.isEmpty ? nil : promptPrefix
-            repoConfig.researchPlan?.promptSuffix = promptSuffix.isEmpty ? nil : promptSuffix
-            repoConfig.researchPlan?.model = repoModel.isEmpty ? nil : repoModel
-            repoConfig.researchPlan?.permissionMode = permissionMode.isEmpty ? nil : permissionMode
-            repoConfig.researchPlan?.allowedTools = allowedTools.isEmpty ? nil : allowedTools
-            repoConfig.researchPlan?.extraFlags = extraFlags.isEmpty ? nil : extraFlags
+            candidate.researchPlan?.promptPrefix = promptPrefix.isEmpty ? nil : promptPrefix
+            candidate.researchPlan?.promptSuffix = promptSuffix.isEmpty ? nil : promptSuffix
+            candidate.researchPlan?.model = repoModel.isEmpty ? nil : repoModel
+            candidate.researchPlan?.permissionMode = permissionMode.isEmpty ? nil : permissionMode
+            candidate.researchPlan?.allowedTools = allowedTools.isEmpty ? nil : allowedTools
+            candidate.researchPlan?.extraFlags = extraFlags.isEmpty ? nil : extraFlags
         }
 
         // Clean up empty sections
-        if let w = repoConfig.worktree,
+        if let w = candidate.worktree,
            w.copyFiles == nil && w.envVar == nil && w.initHook == nil {
-            repoConfig.worktree = nil
+            candidate.worktree = nil
         }
-        if let r = repoConfig.researchPlan,
+        if let r = candidate.researchPlan,
            r.promptPrefix == nil && r.promptSuffix == nil && r.model == nil
             && r.permissionMode == nil && r.allowedTools == nil && r.extraFlags == nil {
-            repoConfig.researchPlan = nil
+            candidate.researchPlan = nil
         }
 
-        repoConfig.save(repoPath: repo.path)
+        // Skip the write entirely when nothing changed. This is what stops
+        // merely *selecting* a repo — which loads values into the fields and
+        // fires the per-field onChange handlers — from rewriting .erdos.yml and
+        // stripping its comments and any keys this struct doesn't model.
+        guard candidate != repoConfig else { return }
+
+        repoConfig = candidate
+        candidate.save(repoPath: repo.path)
     }
 
     private func pickFolder(completion: @escaping (String) -> Void) {
