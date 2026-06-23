@@ -8,7 +8,9 @@ final class CleanupService {
     private let fileManager = FileManager.default
 
     /// Archives gitignored files as Notes, removes the worktree, and logs a timeline event.
-    func cleanupWorktree(for experiment: Experiment, context: ModelContext) async throws {
+    /// `force` discards uncommitted/untracked changes (`git worktree remove --force`)
+    /// and must only be passed after explicit user confirmation.
+    func cleanupWorktree(for experiment: Experiment, context: ModelContext, force: Bool = false) async throws {
         guard let worktreePath = experiment.worktreePath else { return }
 
         // Archive phase — read gitignored files and save as archive notes
@@ -17,7 +19,8 @@ final class CleanupService {
         // Removal phase — remove the worktree via git
         try await gitService.removeWorktree(
             repoPath: experiment.repoPath,
-            worktreePath: worktreePath
+            worktreePath: worktreePath,
+            force: force
         )
 
         experiment.worktreePath = nil
@@ -32,6 +35,13 @@ final class CleanupService {
         )
         event.experiment = experiment
         context.insert(event)
+    }
+
+    /// Uncommitted/untracked changes in the experiment's worktree (empty == clean
+    /// or no worktree). Used by callers to warn before a destructive removal.
+    func uncommittedSummary(for experiment: Experiment) async -> [String] {
+        guard let worktreePath = experiment.worktreePath else { return [] }
+        return await gitService.uncommittedSummary(worktreePath: worktreePath)
     }
 
     // MARK: - Private

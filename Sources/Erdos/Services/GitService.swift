@@ -81,7 +81,11 @@ final class GitService {
     func createWorktree(repoPath: String, branchName: String, baseBranch: String) async throws -> String {
         let repoName = URL(fileURLWithPath: repoPath).lastPathComponent
         let slug = SlugGenerator.generate(from: branchName)
-        let worktreePath = "\(Self.worktreeBase)/\(repoName)--\(slug)"
+        // A short random token guarantees a unique path even when two branch
+        // names slugify identically, so creating one experiment can never
+        // collide with (and clobber) another's worktree directory.
+        let token = String(UUID().uuidString.prefix(6)).lowercased()
+        let worktreePath = "\(Self.worktreeBase)/\(repoName)--\(slug)-\(token)"
 
         // Ensure base directory exists
         let fm = FileManager.default
@@ -89,10 +93,18 @@ final class GitService {
             try fm.createDirectory(atPath: Self.worktreeBase, withIntermediateDirectories: true)
         }
 
-        // Clean up stale worktree directory from a previous failed attempt
+        // A directory already exists at the (now unique) target path. Only
+        // remove it if it's a genuinely stale leftover — NEVER if it's a
+        // registered worktree or holds uncommitted/untracked work.
         if fm.fileExists(atPath: worktreePath) {
+            let registered = await isRegisteredWorktree(worktreePath, repoPath: repoPath)
+            let dirty = await uncommittedSummary(worktreePath: worktreePath)
+            guard !registered, dirty.isEmpty else {
+                throw GitError.worktreeDirty(
+                    "A worktree already exists at \(worktreePath) with \(dirty.count) uncommitted change(s); refusing to overwrite."
+                )
+            }
             try fm.removeItem(atPath: worktreePath)
-            // Also prune git's worktree list
             _ = try? await runner.git("worktree", "prune", in: repoPath)
         }
 
@@ -131,14 +143,45 @@ final class GitService {
         return worktreePath
     }
 
-    func removeWorktree(repoPath: String, worktreePath: String) async throws {
-        let result = try await runner.git("worktree", "remove", worktreePath, in: repoPath)
-        if !result.succeeded {
-            // Try force removal
+    /// Removes a worktree. With `force == false` (the default), git refuses to
+    /// remove a worktree that holds uncommitted or untracked changes — that
+    /// refusal is surfaced as `GitError.worktreeDirty` rather than silently
+    /// escalating to `--force`. Callers pass `force: true` only after the user
+    /// has explicitly confirmed discarding the changes.
+    func removeWorktree(repoPath: String, worktreePath: String, force: Bool = false) async throws {
+        if force {
             let forceResult = try await runner.git("worktree", "remove", "--force", worktreePath, in: repoPath)
             guard forceResult.succeeded else { throw GitError.commandFailed(forceResult.stderr) }
+        } else {
+            let result = try await runner.git("worktree", "remove", worktreePath, in: repoPath)
+            guard result.succeeded else { throw GitError.worktreeDirty(result.stderr) }
         }
         _ = try await runner.git("worktree", "prune", in: repoPath)
+    }
+
+    /// Human-readable list of uncommitted/untracked changes in a worktree
+    /// (empty == clean). Includes untracked files (`-u`). Never throws — an
+    /// inspection failure is treated as clean, since callers use this only to
+    /// decide whether to warn before a destructive action.
+    func uncommittedSummary(worktreePath: String) async -> [String] {
+        guard let result = try? await runner.git("status", "--porcelain=v1", "-u", in: worktreePath),
+              result.succeeded else { return [] }
+        return result.stdout
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { line -> String? in
+                guard line.count >= 4 else { return nil }
+                let index = line[line.startIndex]
+                let worktree = line[line.index(after: line.startIndex)]
+                let filePath = String(line.dropFirst(3))
+                return "\(FileStatus(index: index, worktree: worktree, path: filePath).statusLabel): \(filePath)"
+            }
+    }
+
+    /// Whether `path` is a worktree currently registered with the repo.
+    private func isRegisteredWorktree(_ path: String, repoPath: String) async -> Bool {
+        guard let worktrees = try? await listWorktrees(repoPath: repoPath) else { return false }
+        let target = URL(fileURLWithPath: path).standardizedFileURL.path
+        return worktrees.contains { URL(fileURLWithPath: $0.path).standardizedFileURL.path == target }
     }
 
     func listWorktrees(repoPath: String) async throws -> [WorktreeInfo] {
@@ -372,10 +415,12 @@ final class GitService {
 
     enum GitError: Error, LocalizedError {
         case commandFailed(String)
+        case worktreeDirty(String)
 
         var errorDescription: String? {
             switch self {
             case .commandFailed(let msg): "Git error: \(msg)"
+            case .worktreeDirty(let msg): "Worktree has uncommitted changes: \(msg)"
             }
         }
     }

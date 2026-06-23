@@ -18,6 +18,7 @@ struct ExperimentDetailView: View {
     @State private var showCleanupConfirmation = false
     @State private var isCleaningUp = false
     @State private var cleanupError: String?
+    @State private var dirtySummary: [String] = []
     @State private var claudeUsage: ClaudeUsage?
     @State private var showRecreateSheet = false
 
@@ -111,14 +112,26 @@ struct ExperimentDetailView: View {
             RecreateWorktreeSheet(experiment: experiment)
         }
         .confirmationDialog(
-            "This experiment has a worktree on disk.",
+            dirtySummary.isEmpty
+                ? "This experiment has a worktree on disk."
+                : "This worktree has \(dirtySummary.count) uncommitted change(s).",
             isPresented: $showCleanupConfirmation
         ) {
-            Button("Remove Worktree & Archive Files") {
-                if let status = pendingTerminalStatus {
-                    applyStatusChange(to: status)
-                    pendingTerminalStatus = nil
-                    Task { await performCleanup() }
+            if dirtySummary.isEmpty {
+                Button("Remove Worktree & Archive Files") {
+                    if let status = pendingTerminalStatus {
+                        applyStatusChange(to: status)
+                        pendingTerminalStatus = nil
+                        Task { await performCleanup(force: false) }
+                    }
+                }
+            } else {
+                Button("Discard Changes & Remove Worktree", role: .destructive) {
+                    if let status = pendingTerminalStatus {
+                        applyStatusChange(to: status)
+                        pendingTerminalStatus = nil
+                        Task { await performCleanup(force: true) }
+                    }
                 }
             }
             Button("Keep Worktree") {
@@ -131,7 +144,13 @@ struct ExperimentDetailView: View {
                 pendingTerminalStatus = nil
             }
         } message: {
-            Text("Would you like to archive gitignored files (PLAN.md, TASK-DRAFT.md, etc.) and remove the worktree?")
+            if dirtySummary.isEmpty {
+                Text("Would you like to archive gitignored files (PLAN.md, TASK-DRAFT.md, etc.) and remove the worktree?")
+            } else {
+                let shown = dirtySummary.prefix(15).joined(separator: "\n")
+                let preview = dirtySummary.count > 15 ? shown + "\n…and \(dirtySummary.count - 15) more" : shown
+                Text("These uncommitted changes will be permanently lost:\n\n\(preview)\n\nErdos scratch files (PLAN.md, etc.) are still archived first.")
+            }
         }
     }
 
@@ -162,7 +181,10 @@ struct ExperimentDetailView: View {
                         if (newStatus == .completed || newStatus == .abandoned)
                             && experiment.worktreePath != nil {
                             pendingTerminalStatus = newStatus
-                            showCleanupConfirmation = true
+                            Task {
+                                dirtySummary = await appState.cleanupService.uncommittedSummary(for: experiment)
+                                showCleanupConfirmation = true
+                            }
                         } else {
                             applyStatusChange(to: newStatus)
                         }
@@ -404,18 +426,20 @@ struct ExperimentDetailView: View {
         modelContext.insert(event)
     }
 
-    private func performCleanup() async {
+    private func performCleanup(force: Bool = false) async {
         isCleaningUp = true
         cleanupError = nil
         do {
             try await appState.cleanupService.cleanupWorktree(
                 for: experiment,
-                context: modelContext
+                context: modelContext,
+                force: force
             )
         } catch {
             cleanupError = error.localizedDescription
         }
         isCleaningUp = false
+        dirtySummary = []
     }
 }
 
