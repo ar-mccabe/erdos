@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 
 @Observable
 @MainActor
@@ -52,65 +53,92 @@ final class BackupService {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HHmmss"
         let timestamp = formatter.string(from: Date())
-        let baseName = "erdos-backup-\(timestamp)"
+        let destURL = backupDirectory.appendingPathComponent("erdos-backup-\(timestamp).store")
 
-        let suffixes = ["", "-wal", "-shm"]
-        var copiedAny = false
-
-        for suffix in suffixes {
-            let sourceName = storeURL.lastPathComponent + suffix
-            let sourceURL = storeURL.deletingLastPathComponent().appendingPathComponent(sourceName)
-            let destURL = backupDirectory.appendingPathComponent(baseName + ".store" + suffix)
-
-            guard fm.fileExists(atPath: sourceURL.path) else { continue }
-
-            do {
-                try fm.copyItem(at: sourceURL, to: destURL)
-                copiedAny = true
-            } catch {
-                print("[Erdos Backup] Failed to copy \(sourceName): \(error)")
-            }
+        // VACUUM INTO refuses to overwrite an existing file. Timestamps are
+        // per-second so a same-second collision is the only way this trips.
+        guard !fm.fileExists(atPath: destURL.path) else {
+            print("[Erdos Backup] Backup already exists for this second: \(destURL.lastPathComponent)")
+            return false
         }
 
-        if copiedAny {
-            lastBackupDate = Date()
-            print("[Erdos Backup] Backup created: \(baseName).store")
-            pruneOldBackups()
+        // Produce a single, transactionally-consistent snapshot rather than
+        // copying the live WAL-mode .store/-wal/-shm separately (which can
+        // capture an internally inconsistent set).
+        guard snapshot(from: storeURL, to: destURL) else {
+            try? fm.removeItem(at: destURL)  // drop any partial file
+            return false
         }
 
-        return copiedAny
+        lastBackupDate = Date()
+        print("[Erdos Backup] Backup created: \(destURL.lastPathComponent)")
+        pruneOldBackups()
+        return true
+    }
+
+    /// Writes a consistent single-file snapshot of `src` to `dst` using SQLite's
+    /// `VACUUM INTO`. The destination is self-contained (no -wal/-shm companions).
+    /// Safe to run while SwiftData holds the store open: WAL mode permits a second
+    /// connection, and `performBackup` is @MainActor so no SwiftData write interleaves.
+    private func snapshot(from src: URL, to dst: URL) -> Bool {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(src.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK else {
+            if let db { sqlite3_close(db) }
+            print("[Erdos Backup] Failed to open store for snapshot: \(src.path)")
+            return false
+        }
+        defer { sqlite3_close(db) }
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "VACUUM INTO ?", -1, &stmt, nil) == SQLITE_OK else {
+            print("[Erdos Backup] Failed to prepare VACUUM INTO: \(String(cString: sqlite3_errmsg(db)))")
+            return false
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        // SQLITE_TRANSIENT tells SQLite to copy the bound string.
+        let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        sqlite3_bind_text(stmt, 1, dst.path, -1, SQLITE_TRANSIENT)
+
+        guard sqlite3_step(stmt) == SQLITE_DONE else {
+            print("[Erdos Backup] VACUUM INTO failed: \(String(cString: sqlite3_errmsg(db)))")
+            return false
+        }
+        return true
+    }
+
+    /// Existing backup `.store` files, newest first. Sorted by the timestamp
+    /// embedded in the filename (yyyy-MM-dd-HHmmss is lexicographically
+    /// chronological) — NOT by file creation date, which snapshots/copies
+    /// inherit identically from the source store and so cannot order backups.
+    private func sortedBackupStores() -> [URL] {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: backupDirectory,
+            includingPropertiesForKeys: nil,
+            options: .skipsHiddenFiles
+        ) else { return [] }
+
+        return contents
+            .filter { $0.pathExtension == "store" && $0.lastPathComponent.hasPrefix("erdos-backup-") }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
     }
 
     private func pruneOldBackups() {
         let fm = FileManager.default
-
-        guard let contents = try? fm.contentsOfDirectory(
-            at: backupDirectory,
-            includingPropertiesForKeys: [.creationDateKey],
-            options: .skipsHiddenFiles
-        ) else { return }
-
-        // Find primary .store files (not -wal or -shm companions)
-        let storeFiles = contents
-            .filter { $0.lastPathComponent.hasSuffix(".store") }
-            .sorted { a, b in
-                let dateA = (try? a.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
-                let dateB = (try? b.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
-                return dateA > dateB  // newest first
-            }
-
+        let storeFiles = sortedBackupStores()
         guard storeFiles.count > maxBackups else { return }
 
         let toDelete = storeFiles.suffix(from: maxBackups)
         for storeFile in toDelete {
             let base = storeFile.path
+            // New backups are single files; "-wal"/"-shm" only exist for
+            // legacy 3-file backups, and removeItem ignores missing paths.
             for suffix in ["", "-wal", "-shm"] {
-                let path = base + suffix
-                try? fm.removeItem(atPath: path)
+                try? fm.removeItem(atPath: base + suffix)
             }
         }
 
-        let pruned = toDelete.count
-        print("[Erdos Backup] Pruned \(pruned) old backup(s)")
+        print("[Erdos Backup] Pruned \(toDelete.count) old backup(s)")
     }
 }
