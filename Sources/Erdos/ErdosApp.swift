@@ -36,14 +36,7 @@ struct ErdosApp: App {
             }
         }
 
-        let schema = Schema([
-            Experiment.self,
-            Note.self,
-            Artifact.self,
-            ClaudeSession.self,
-            TimelineEvent.self,
-            TaskUpdate.self,
-        ])
+        let schema = Schema(versionedSchema: ErdosSchemaV1.self)
 
         let config = ModelConfiguration(
             "ErdosStore",
@@ -52,12 +45,79 @@ struct ErdosApp: App {
         )
 
         do {
-            container = try ModelContainer(for: schema, configurations: config)
+            container = try ModelContainer(
+                for: schema,
+                migrationPlan: ErdosMigrationPlan.self,
+                configurations: config
+            )
         } catch {
-            fatalError("[Erdos] Failed to create ModelContainer at \(storeURL.path): \(error)")
+            // Never fatalError here: that would crash-loop the app and push the
+            // user to delete the store. Instead preserve the unreadable store,
+            // record the failure for the UI, and start fresh so the app opens.
+            container = Self.recoverFromUnreadableStore(
+                storeDirectory: storeDirectory,
+                storeURL: storeURL,
+                schema: schema,
+                config: config,
+                error: error
+            )
         }
 
         backupService = BackupService(storeURL: storeURL)
+    }
+
+    /// Last-resort recovery when the store can't be opened (e.g. an incompatible
+    /// schema change with no migration). Moves the unreadable store aside, records
+    /// the event for the UI, and returns a fresh container so the app stays usable.
+    @MainActor
+    private static func recoverFromUnreadableStore(
+        storeDirectory: URL,
+        storeURL: URL,
+        schema: Schema,
+        config: ModelConfiguration,
+        error: Error
+    ) -> ModelContainer {
+        let fm = FileManager.default
+        print("[Erdos] ModelContainer open failed at \(storeURL.path): \(error)")
+
+        // 1. Preserve the unreadable store — move aside, never delete.
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+        let quarantineDir = storeDirectory
+            .appendingPathComponent("Quarantine", isDirectory: true)
+            .appendingPathComponent("erdos-\(formatter.string(from: Date()))", isDirectory: true)
+        try? fm.createDirectory(at: quarantineDir, withIntermediateDirectories: true)
+
+        var movedAny = false
+        for suffix in ["", "-wal", "-shm"] {
+            let src = URL(fileURLWithPath: storeURL.path + suffix)
+            guard fm.fileExists(atPath: src.path) else { continue }
+            let dst = quarantineDir.appendingPathComponent(storeURL.lastPathComponent + suffix)
+            do {
+                try fm.moveItem(at: src, to: dst)
+                movedAny = true
+            } catch {
+                print("[Erdos] Failed to quarantine \(src.lastPathComponent): \(error)")
+            }
+        }
+
+        // 2. Record for the UI to surface on launch.
+        let recovery = StoreRecoveryState.shared
+        recovery.didRecover = true
+        recovery.quarantinePath = movedAny ? quarantineDir.path : nil
+        recovery.latestBackupPath = BackupService.latestBackupPath(storeURL: storeURL)
+        recovery.reason = error.localizedDescription
+
+        // 3. Retry with a fresh store so the app launches.
+        do {
+            return try ModelContainer(
+                for: schema,
+                migrationPlan: ErdosMigrationPlan.self,
+                configurations: config
+            )
+        } catch {
+            fatalError("[Erdos] Unrecoverable: fresh ModelContainer also failed at \(storeURL.path): \(error)")
+        }
     }
 
     var body: some Scene {

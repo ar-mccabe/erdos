@@ -124,6 +124,24 @@ final class BackupService {
             .sorted { $0.lastPathComponent > $1.lastPathComponent }
     }
 
+    /// Path to the most recent backup `.store`, derived from the store location.
+    /// Static so launch-time store recovery can use it before any instance exists.
+    static func latestBackupPath(storeURL: URL) -> String? {
+        let backupDir = storeURL.deletingLastPathComponent()
+            .appendingPathComponent("Backups", isDirectory: true)
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: backupDir,
+            includingPropertiesForKeys: nil,
+            options: .skipsHiddenFiles
+        ) else { return nil }
+
+        return contents
+            .filter { $0.pathExtension == "store" && $0.lastPathComponent.hasPrefix("erdos-backup-") }
+            .sorted { $0.lastPathComponent > $1.lastPathComponent }
+            .first?.path
+    }
+
     private func pruneOldBackups() {
         let fm = FileManager.default
         let storeFiles = sortedBackupStores()

@@ -9,6 +9,7 @@ struct MainView: View {
     /// Experiments that have been opened at least once — their views stay alive
     @State private var visitedExperimentIDs: Set<PersistentIdentifier> = []
     @State private var hasVisitedAdHocTerminals = false
+    @State private var showRecoveryAlert = false
 
     var body: some View {
         @Bindable var state = appState
@@ -67,6 +68,16 @@ struct MainView: View {
         .task {
             await appState.repoDiscovery.scan()
         }
+        .onAppear {
+            if StoreRecoveryState.shared.didRecover {
+                showRecoveryAlert = true
+            }
+        }
+        .alert("Data store could not be opened", isPresented: $showRecoveryAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(recoveryMessage)
+        }
         .task {
             // One-time migration: rename "active" → "implementing"
             let descriptor = FetchDescriptor<Experiment>(
@@ -95,5 +106,23 @@ struct MainView: View {
                 }
             }
         }
+    }
+
+    private var recoveryMessage: String {
+        let recovery = StoreRecoveryState.shared
+        var lines = [
+            "Your data store couldn't be opened, so Erdos started with an empty store to stay usable. Your previous data was NOT deleted.",
+        ]
+        if let quarantine = recovery.quarantinePath {
+            lines.append("\nPreserved store: \(quarantine)")
+        }
+        if let backup = recovery.latestBackupPath {
+            lines.append("Latest backup: \(backup)")
+        }
+        lines.append("\nTo restore: quit Erdos, copy a backup .store over ~/Library/Application Support/Erdos/erdos.store, then relaunch.")
+        if let reason = recovery.reason {
+            lines.append("\nDetails: \(reason)")
+        }
+        return lines.joined(separator: "\n")
     }
 }
